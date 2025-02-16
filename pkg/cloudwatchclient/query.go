@@ -6,9 +6,10 @@ import (
 )
 
 // BuildCloudWatchQuery constructs a CloudWatch Logs Insights query string with proper escaping
-func BuildCloudWatchQuery(streamPrefix, filter string) string {
+func BuildCloudWatchQuery(streamPrefix string, fields []string, filter string) string {
 	// Base query that selects required fields and filters by stream prefix
-	query := fmt.Sprintf("fields @timestamp, @logStream, @message | filter @logStream like /%s/", streamPrefix)
+	fieldsStr := strings.Join(fields, ", ")
+	query := fmt.Sprintf("fields %s | filter @logStream like /%s/", fieldsStr, streamPrefix)
 
 	// Add message filter if provided
 	if filter != "" {

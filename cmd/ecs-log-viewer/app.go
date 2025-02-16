@@ -102,7 +102,7 @@ func runApp(c *cli.Context) error {
 	fmt.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
 	fmt.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
 
-	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, runOption.filter)
+	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, []string{"@timestamp", "@logStream", "@message"}, runOption.filter)
 
 	if runOption.web {
 		consoleURL := cloudwatchclient.BuildConsoleURL(cfg.Region, logGroup, query, runOption.duration)

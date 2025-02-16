@@ -11,9 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
-	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/urfave/cli/v2"
 
@@ -142,8 +140,8 @@ func runApp(c *cli.Context) error {
 		return err
 	}
 
-	ecsClient := ecsclient.NewEcsClient(ctx, ecs.NewFromConfig(cfg))
-	logsClient := cloudwatchclient.NewCloudWatchClient(ctx, cloudwatchlogs.NewFromConfig(cfg))
+	ecsClient := ecsclient.NewEcsClient(ctx, &cfg)
+	logsClient := cloudwatchclient.NewCloudWatchClient(ctx, &cfg)
 
 	_, containerDef, err := selectTaskAndContainer(ecsClient)
 	if err != nil {

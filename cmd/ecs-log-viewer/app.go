@@ -105,7 +105,7 @@ func runApp(c *cli.Context) error {
 	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, runOption.filter)
 
 	if runOption.web {
-		consoleURL := cloudwatchclient.BuildConsoleURL(cfg.Region, logGroup, query)
+		consoleURL := cloudwatchclient.BuildConsoleURL(cfg.Region, logGroup, query, runOption.duration)
 		fmt.Printf("Opening AWS Console URL: %s\n", consoleURL)
 		return openBrowser(consoleURL)
 	}
@@ -142,16 +142,14 @@ func openBrowser(url string) error {
 }
 
 func open(url string) error {
-	var err error = nil
 	switch {
 	case runtime.GOOS == "linux":
-		err = exec.Command("xdg-open", url).Start()
+		return exec.Command("xdg-open", url).Start()
 	case runtime.GOOS == "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	case runtime.GOOS == "darwin":
-		err = exec.Command("open", url).Start()
+		return exec.Command("open", url).Start()
 	default:
-		err = fmt.Errorf("unsupported platform")
+		return fmt.Errorf("unsupported platform")
 	}
-	return err
 }

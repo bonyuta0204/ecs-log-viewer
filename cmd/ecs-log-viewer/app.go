@@ -29,6 +29,22 @@ type AppOption struct {
 	web      bool
 	fields   []string
 	output   string
+	format   string
+}
+
+func (o *AppOption) validate() error {
+	switch o.format {
+	case "simple":
+		if len(o.fields) != 1 {
+			return fmt.Errorf("simple format can only be used when exactly one field is selected")
+		}
+
+	case "csv", "json":
+
+	default:
+		return fmt.Errorf("invalid format: %s", o.format)
+	}
+	return nil
 }
 
 func newAppOption(c *cli.Context) AppOption {
@@ -40,6 +56,7 @@ func newAppOption(c *cli.Context) AppOption {
 		web:      c.Bool("web"),
 		fields:   c.StringSlice("fields"),
 		output:   c.String("output"),
+		format:   c.String("format"),
 	}
 }
 
@@ -100,7 +117,7 @@ func getLogConfiguration(containerDef *ecsTypes.ContainerDefinition) (string, st
 	return logGroup, logStreamPrefix, nil
 }
 
-func writeResults(results [][]cwTypes.ResultField, output string) error {
+func writeResults(results [][]cwTypes.ResultField, output string, format string) error {
 	var writer io.Writer
 	var file *os.File
 
@@ -120,12 +137,13 @@ func writeResults(results [][]cwTypes.ResultField, output string) error {
 		writer = file
 	}
 
-	if err := cloudwatchclient.WriteLogEventsCSV(writer, results, false); err != nil {
-		return fmt.Errorf("failed to write results to CSV: %v", err)
+	outputFormat := cloudwatchclient.OutputFormat(format)
+	if err := cloudwatchclient.WriteLogEvents(writer, results, outputFormat, true); err != nil {
+		return fmt.Errorf("failed to write results in %s format: %v", format, err)
 	}
 
 	if output != "" {
-		fmt.Printf("Wrote results to CSV file: %s\n", output)
+		fmt.Printf("Wrote results in %s format to file: %s\n", format, output)
 	}
 
 	return nil
@@ -134,6 +152,11 @@ func writeResults(results [][]cwTypes.ResultField, output string) error {
 func runApp(c *cli.Context) error {
 	ctx := context.Background()
 	runOption := newAppOption(c)
+
+	err := runOption.validate()
+	if err != nil {
+		return err
+	}
 
 	cfg, err := setupAWSConfig(ctx, runOption)
 	if err != nil {
@@ -177,7 +200,7 @@ func runApp(c *cli.Context) error {
 		return nil
 	}
 
-	return writeResults(results, runOption.output)
+	return writeResults(results, runOption.output, runOption.format)
 }
 
 func openBrowser(url string) error {

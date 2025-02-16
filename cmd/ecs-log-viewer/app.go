@@ -128,23 +128,33 @@ func runApp(c *cli.Context) error {
 	}
 
 	var writer io.Writer
+	var file *os.File
 	if runOption.output == "" {
 		writer = os.Stdout
 	} else {
-		file, err := os.Create(runOption.output)
+		var err error
+		file, err = os.Create(runOption.output)
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %v", err)
 		}
-		defer file.Close()
 		writer = file
 	}
 
 	// Write results to CSV
 	if err := cloudwatchclient.WriteLogEventsCSV(writer, results, false); err != nil {
+		if file != nil {
+			err = file.Close()
+			if err != nil {
+				return fmt.Errorf("failed to close output file: %v", err)
+			}
+		}
 		return fmt.Errorf("failed to write results to CSV: %v", err)
 	}
 
-	if runOption.output != "" {
+	if file != nil {
+		if err := file.Close(); err != nil {
+			return fmt.Errorf("failed to close output file: %v", err)
+		}
 		fmt.Printf("Wrote results to CSV file: %s\n", runOption.output)
 	}
 

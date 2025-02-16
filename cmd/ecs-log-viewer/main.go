@@ -46,6 +46,11 @@ func main() {
 				Aliases: []string{"o"},
 				Usage:   "Output file path for saving logs. Defaults to stdout if not specified.",
 			},
+			&cli.StringFlag{
+				Name:  "format",
+				Usage: "Output format (simple, csv, json). 'simple' format can only be used when exactly one field is selected",
+				Value: "simple",
+			},
 			&cli.BoolFlag{
 				Name:    "web",
 				Aliases: []string{"w"},

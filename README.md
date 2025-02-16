@@ -11,6 +11,7 @@ A CLI tool for interactively browsing and retrieving logs from AWS CloudWatch fo
 - 🕒 Configurable time range for log fetching
 - 🔐 AWS profile support for easy credential management
 - 🌍 Region-specific log viewing
+- 📄 Multiple output formats (simple, CSV, JSON)
 
 ## Installation
 
@@ -60,11 +61,27 @@ ecs-log-viewer [options]
 - `--filter, -f`: Filter pattern to search for in log messages
 - `--fields`: Comma-separated list of log fields to display (e.g., @message,@timestamp). Default: @message
 - `--output, -o`: Output file path for saving logs. Defaults to stdout if not specified
+- `--format`: Output format (simple, csv, json). Default: csv
+  - `simple`: One value per line, only available when exactly one field is selected
+  - `csv`: Comma-separated values with headers
+  - `json`: Pretty-printed JSON array of objects
 - `--web, -w`: Open logs in AWS CloudWatch Console instead of viewing in terminal
 
-### Example
+### Examples
 
 ```bash
+# View logs in CSV format (default)
+ecs-log-viewer
+
+# View only @message field in simple format
+ecs-log-viewer --fields @message --format simple
+
+# Export multiple fields in JSON format
+ecs-log-viewer --fields @message,@timestamp --format json --output logs.json
+
+# View logs from the last hour with filtering
+ecs-log-viewer --duration 1h --filter "error"
+
 # Use a specific AWS profile and region
 ecs-log-viewer --profile myprofile --region us-west-2
 

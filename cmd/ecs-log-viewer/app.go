@@ -9,9 +9,12 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/urfave/cli/v2"
 
 	"github.com/bonyuta0204/ecs-log-viewer/pkg/cloudwatchclient"
@@ -42,11 +45,7 @@ func newAppOption(c *cli.Context) AppOption {
 	}
 }
 
-func runApp(c *cli.Context) error {
-	ctx := context.Background()
-	runOption := newAppOption(c)
-
-	// Load AWS configuration with profile and region from CLI flags
+func setupAWSConfig(ctx context.Context, runOption AppOption) (aws.Config, error) {
 	opts := []func(*config.LoadOptions) error{}
 
 	if profile := runOption.profile; profile != "" {
@@ -58,50 +57,104 @@ func runApp(c *cli.Context) error {
 
 	cfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
-		return fmt.Errorf("unable to load AWS SDK config: %v", err)
+		return aws.Config{}, fmt.Errorf("unable to load AWS SDK config: %v", err)
+	}
+	return cfg, nil
+}
+
+func selectTaskAndContainer(ecsClient *ecsclient.EcsClient) (*ecsTypes.TaskDefinition, *ecsTypes.ContainerDefinition, error) {
+	taskDefFamilies, err := ecsClient.ListTaskDefinitionFamilies()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list task definition families: %v", err)
+	}
+	if len(taskDefFamilies) == 0 {
+		return nil, nil, fmt.Errorf("no task definition families found")
+	}
+
+	taskDefFamily, err := selector.SelectItem(taskDefFamilies, "Select Task Definition Family > ")
+	if err != nil {
+		return nil, nil, fmt.Errorf("task definition family selection aborted: %v", err)
+	}
+
+	taskDef, err := ecsClient.DescribeLatestTaskDefinition(taskDefFamily)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to describe latest task definition: %v", err)
+	}
+
+	containerDef, err := selector.SelectContainerDefinition(taskDef.ContainerDefinitions, "Select Container Definition > ")
+	if err != nil {
+		return nil, nil, fmt.Errorf("container definition selection aborted: %v", err)
+	}
+
+	return taskDef, &containerDef, nil
+}
+
+func getLogConfiguration(containerDef *ecsTypes.ContainerDefinition) (string, string, error) {
+	logOpts := containerDef.LogConfiguration.Options
+	logGroup, ok := logOpts["awslogs-group"]
+	if !ok {
+		return "", "", fmt.Errorf("awslogs-group not set in log configuration")
+	}
+	logStreamPrefix, ok := logOpts["awslogs-stream-prefix"]
+	if !ok {
+		return "", "", fmt.Errorf("awslogs-stream-prefix not set in log configuration")
+	}
+	return logGroup, logStreamPrefix, nil
+}
+
+func writeResults(results [][]cwTypes.ResultField, output string) error {
+	var writer io.Writer
+	var file *os.File
+
+	if output == "" {
+		writer = os.Stdout
+	} else {
+		var err error
+		file, err = os.Create(output)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %v", err)
+		}
+		defer func() {
+			if err := file.Close(); err != nil {
+				fmt.Printf("Warning: failed to close output file: %v\n", err)
+			}
+		}()
+		writer = file
+	}
+
+	if err := cloudwatchclient.WriteLogEventsCSV(writer, results, false); err != nil {
+		return fmt.Errorf("failed to write results to CSV: %v", err)
+	}
+
+	if output != "" {
+		fmt.Printf("Wrote results to CSV file: %s\n", output)
+	}
+
+	return nil
+}
+
+func runApp(c *cli.Context) error {
+	ctx := context.Background()
+	runOption := newAppOption(c)
+
+	cfg, err := setupAWSConfig(ctx, runOption)
+	if err != nil {
+		return err
 	}
 
 	ecsClient := ecsclient.NewEcsClient(ctx, ecs.NewFromConfig(cfg))
 	logsClient := cloudwatchclient.NewCloudWatchClient(ctx, cloudwatchlogs.NewFromConfig(cfg))
 
-	// 1. List Task Definition Families
-	taskDefFamilies, err := ecsClient.ListTaskDefinitionFamilies()
+	_, containerDef, err := selectTaskAndContainer(ecsClient)
 	if err != nil {
-		return fmt.Errorf("failed to list task definition families: %v", err)
-	}
-	if len(taskDefFamilies) == 0 {
-		return fmt.Errorf("no task definition families found")
+		return err
 	}
 
-	taskDefFamily, err := selector.SelectItem(taskDefFamilies, "Select Task Definition Family > ")
+	logGroup, logStreamPrefix, err := getLogConfiguration(containerDef)
 	if err != nil {
-		return fmt.Errorf("task definition family selection aborted: %v", err)
+		return err
 	}
 
-	// 2. Describe the latest task definition for the selected family
-	taskDef, err := ecsClient.DescribeLatestTaskDefinition(taskDefFamily)
-	if err != nil {
-		return fmt.Errorf("failed to describe latest task definition: %v", err)
-	}
-
-	// 3. Select a container definition using selector
-	containerDef, err := selector.SelectContainerDefinition(taskDef.ContainerDefinitions, "Select Container Definition > ")
-	if err != nil {
-		return fmt.Errorf("container definition selection aborted: %v", err)
-	}
-
-	// 4. Extract log configuration from the selected container
-	logOpts := containerDef.LogConfiguration.Options
-	logGroup, ok := logOpts["awslogs-group"]
-	if !ok {
-		return fmt.Errorf("awslogs-group not set in log configuration")
-	}
-	logStreamPrefix, ok := logOpts["awslogs-stream-prefix"]
-	if !ok {
-		return fmt.Errorf("awslogs-stream-prefix not set in log configuration")
-	}
-
-	// Query logs using the duration from CLI flag
 	endTime := time.Now()
 	startTime := endTime.Add(-runOption.duration)
 
@@ -116,7 +169,6 @@ func runApp(c *cli.Context) error {
 		return openBrowser(consoleURL)
 	}
 
-	// Query logs using the new method
 	results, err := logsClient.QueryLogs(logGroup, query, startTime, endTime)
 	if err != nil {
 		return fmt.Errorf("failed to query logs: %v", err)
@@ -127,38 +179,7 @@ func runApp(c *cli.Context) error {
 		return nil
 	}
 
-	var writer io.Writer
-	var file *os.File
-	if runOption.output == "" {
-		writer = os.Stdout
-	} else {
-		var err error
-		file, err = os.Create(runOption.output)
-		if err != nil {
-			return fmt.Errorf("failed to create output file: %v", err)
-		}
-		writer = file
-	}
-
-	// Write results to CSV
-	if err := cloudwatchclient.WriteLogEventsCSV(writer, results, false); err != nil {
-		if file != nil {
-			err = file.Close()
-			if err != nil {
-				return fmt.Errorf("failed to close output file: %v", err)
-			}
-		}
-		return fmt.Errorf("failed to write results to CSV: %v", err)
-	}
-
-	if file != nil {
-		if err := file.Close(); err != nil {
-			return fmt.Errorf("failed to close output file: %v", err)
-		}
-		fmt.Printf("Wrote results to CSV file: %s\n", runOption.output)
-	}
-
-	return nil
+	return writeResults(results, runOption.output)
 }
 
 func openBrowser(url string) error {

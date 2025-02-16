@@ -8,7 +8,7 @@ $(DIST):
 	mkdir -p $(DIST)
 
 $(BINARIES): $(DIST) $(SOURCES)
-	go build -o $(BINARIES) ./cmd
+	go build -o $(BINARIES) ./cmd/ecs-log-viewer
 
 build: $(BINARIES)
 

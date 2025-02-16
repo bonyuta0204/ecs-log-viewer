@@ -41,6 +41,11 @@ func main() {
 				Usage: "Comma-separated list of log fields to display (e.g., @message,@timestamp). Default: @message",
 				Value: cli.NewStringSlice("@message"),
 			},
+			&cli.StringFlag{
+				Name:    "output",
+				Aliases: []string{"o"},
+				Usage:   "Output file path for saving logs. Defaults to stdout if not specified.",
+			},
 			&cli.BoolFlag{
 				Name:    "web",
 				Aliases: []string{"w"},

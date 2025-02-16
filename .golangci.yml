@@ -1,0 +1,12 @@
+linters:
+  enable:
+    - gofmt
+    - govet
+    - golint
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+
+issues:
+  exclude-use-default: false

@@ -3,7 +3,7 @@ before:
     - go mod tidy
 
 builds:
-  - main: ./cmd/ecs-log-viewer/main.go
+  - main: ./cmd/ecs-log-viewer
     env:
       - CGO_ENABLED=0
     goos:

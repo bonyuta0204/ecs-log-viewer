@@ -10,6 +10,7 @@ import (
 	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
+// CloudWatchClient provides methods to interact with AWS CloudWatch Logs
 type CloudWatchClient struct {
 	ctx    context.Context
 	client *cw.Client

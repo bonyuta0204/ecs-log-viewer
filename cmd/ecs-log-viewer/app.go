@@ -18,6 +18,7 @@ import (
 	"github.com/bonyuta0204/ecs-log-viewer/pkg/selector"
 )
 
+// AppOption contains configuration options for the ECS log viewer application
 type AppOption struct {
 	profile  string
 	region   string

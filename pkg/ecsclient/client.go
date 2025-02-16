@@ -8,6 +8,7 @@ import (
 	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
+// EcsClient provides methods to interact with AWS ECS service
 type EcsClient struct {
 	ctx    context.Context
 	client *ecs.Client
@@ -107,6 +108,7 @@ func (e *EcsClient) ListTaskDefinitions() ([]TaskDef, error) {
 	return taskDefs, nil
 }
 
+// ListTaskDefinitionFamilies retrieves all task definition families from ECS
 func (e *EcsClient) ListTaskDefinitionFamilies() ([]TaskDefFamily, error) {
 	var families []TaskDefFamily
 	input := &ecs.ListTaskDefinitionFamiliesInput{}
@@ -149,10 +151,12 @@ func (e *EcsClient) DescribeLatestTaskDefinition(family TaskDefFamily) (*ecsType
 	return e.DescribeTaskDefinition(resp.TaskDefinitionArns[0])
 }
 
+// ContainerDefinition represents an ECS container definition with essential information
 type ContainerDefinition struct {
 	ecsTypes.ContainerDefinition
 }
 
+// Label returns the display label for the container definition
 func (c ContainerDefinition) Label() string {
 	return *c.Name
 }
@@ -162,14 +166,17 @@ type TaskDef struct {
 	Arn string
 }
 
+// Label returns the display label for the task definition
 func (t TaskDef) Label() string {
 	return t.Arn
 }
 
+// TaskDefFamily represents an ECS task definition family
 type TaskDefFamily struct {
 	Name string
 }
 
+// Label returns the display label for the task definition family
 func (t TaskDefFamily) Label() string {
 	return t.Name
 }

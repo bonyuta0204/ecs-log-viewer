@@ -1,0 +1,21 @@
+linters:
+  enable:
+    - gofmt
+    - govet
+    - revive
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - gocyclo
+    - misspell
+
+issues:
+  exclude-use-default: false
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+        disabled: false

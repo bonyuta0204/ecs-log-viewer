@@ -7,6 +7,7 @@ import (
 	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
+// WriteLogEventsCSV writes CloudWatch log events to a CSV file with optional headers
 func WriteLogEventsCSV(w io.Writer, events [][]cwTypes.ResultField, writeHeader bool) error {
 	if len(events) == 0 {
 		return nil

@@ -16,16 +16,33 @@ import (
 	"github.com/bonyuta0204/ecs-log-viewer/pkg/selector"
 )
 
+type AppOption struct {
+	profile  string
+	region   string
+	duration time.Duration
+	filter   string
+}
+
+func newAppOption(c *cli.Context) AppOption {
+	return AppOption{
+		profile:  c.String("profile"),
+		region:   c.String("region"),
+		duration: c.Duration("duration"),
+		filter:   c.String("filter"),
+	}
+}
+
 func runApp(c *cli.Context) error {
 	ctx := context.Background()
+	runOption := newAppOption(c)
 
 	// Load AWS configuration with profile and region from CLI flags
 	opts := []func(*config.LoadOptions) error{}
 
-	if profile := c.String("profile"); profile != "" {
+	if profile := runOption.profile; profile != "" {
 		opts = append(opts, config.WithSharedConfigProfile(profile))
 	}
-	if region := c.String("region"); region != "" {
+	if region := runOption.region; region != "" {
 		opts = append(opts, config.WithRegion(region))
 	}
 
@@ -76,13 +93,13 @@ func runApp(c *cli.Context) error {
 
 	// Query logs using the duration from CLI flag
 	endTime := time.Now()
-	startTime := endTime.Add(-c.Duration("duration"))
+	startTime := endTime.Add(-runOption.duration)
 
 	fmt.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
 	fmt.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
 
 	// Query logs using the new method
-	results, err := logsClient.QueryLogsByStreamPrefix(logGroup, logStreamPrefix, startTime, endTime)
+	results, err := logsClient.QueryLogsByStreamPrefix(logGroup, logStreamPrefix, startTime, endTime, runOption.filter)
 	if err != nil {
 		return fmt.Errorf("failed to query logs: %v", err)
 	}

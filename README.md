@@ -7,6 +7,7 @@ A CLI tool for interactively browsing and retrieving logs from AWS CloudWatch fo
 - 🔍 Interactive selection of ECS tasks and containers
 - 📊 View CloudWatch logs from ECS containers in real-time
 - ⚡ Fast log retrieval with AWS SDK v2
+- 🔎 Filter logs by string matching
 - 🕒 Configurable time range for log fetching
 - 🔐 AWS profile support for easy credential management
 - 🌍 Region-specific log viewing
@@ -56,6 +57,7 @@ ecs-log-viewer [options]
 - `--profile, -p`: AWS profile to use (can also be set via AWS_PROFILE environment variable)
 - `--region, -r`: AWS region to use (can also be set via AWS_REGION environment variable)
 - `--duration, -d`: Duration to fetch logs for (e.g., 24h, 1h, 30m) (default: 24h)
+- `--filter, -f`: String pattern to filter log messages
 
 ### Example
 
@@ -65,6 +67,9 @@ ecs-log-viewer --profile myprofile --region us-west-2
 
 # View logs from the last hour
 ecs-log-viewer --duration 1h
+
+# View logs containing specific text
+ecs-log-viewer --filter "error"
 ```
 
 ## Dependencies

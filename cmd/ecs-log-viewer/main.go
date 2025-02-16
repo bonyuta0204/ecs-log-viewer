@@ -31,6 +31,11 @@ func main() {
 				Usage:   "Duration to fetch logs for (e.g. 24h, 1h, 30m)",
 				Value:   24 * time.Hour,
 			},
+			&cli.StringFlag{
+				Name:    "filter",
+				Aliases: []string{"f"},
+				Usage:   "Filter logs by keyword",
+			},
 		},
 		Action: runApp,
 	}

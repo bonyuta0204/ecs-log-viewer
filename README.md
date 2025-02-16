@@ -15,10 +15,29 @@ A CLI tool for interactively browsing and retrieving logs from AWS CloudWatch fo
 
 ### Prerequisites
 
-- Go 1.24 or later
 - AWS credentials configured
 
+### Using go install
+
+If you have Go 1.24 or later installed:
+
+```bash
+go install github.com/bonyuta0204/ecs-log-viewer/cmd@latest
+```
+
+This will install the latest released version. To install a specific version:
+
+```bash
+go install github.com/bonyuta0204/ecs-log-viewer/cmd@v0.1.0
+```
+
+### Direct Download
+
+You can download the latest release for your platform from the [releases page](https://github.com/bonyuta0204/ecs-log-viewer/releases).
+
 ### Building from Source
+
+Requires Go 1.24 or later:
 
 ```bash
 git clone https://github.com/bonyuta0204/ecs-log-viewer.git
@@ -61,3 +80,15 @@ This project is licensed under the terms of the included LICENSE file.
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Releasing
+
+This project uses [GoReleaser](https://goreleaser.com/) for building and releasing. To create a new release:
+
+1. Create and push a new tag:
+   ```bash
+   git tag -a v0.1.0 -m "First release"
+   git push origin v0.1.0
+   ```
+
+2. GitHub Actions will automatically build and publish the release.

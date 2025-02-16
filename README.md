@@ -58,6 +58,7 @@ ecs-log-viewer [options]
 - `--region, -r`: AWS region to use (can also be set via AWS_REGION environment variable)
 - `--duration, -d`: Duration to fetch logs for (e.g., 24h, 1h, 30m) (default: 24h)
 - `--filter, -f`: String pattern to filter log messages
+- `--web`: Start in web mode, launching a web interface instead of CLI
 
 ### Example
 
@@ -70,6 +71,12 @@ ecs-log-viewer --duration 1h
 
 # View logs containing specific text
 ecs-log-viewer --filter "error"
+
+# Start in web mode
+ecs-log-viewer --web
+
+# Start web mode with filter and duration options
+ecs-log-viewer --web --filter "error" --duration 2h
 ```
 
 ## Dependencies

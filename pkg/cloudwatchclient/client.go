@@ -84,15 +84,8 @@ type LogEvent struct {
 	Message   string
 }
 
-// QueryResult represents the result of a CloudWatch Logs query
-type QueryResult struct {
-	LogStreamName string
-	Timestamp     time.Time
-	Message       string
-}
-
 // QueryLogs queries logs from streams matching the prefix within the specified time range
-func (c *CloudWatchClient) QueryLogs(logGroup, query string, startTime, endTime time.Time) ([]QueryResult, error) {
+func (c *CloudWatchClient) QueryLogs(logGroup, query string, startTime, endTime time.Time) ([][]cwTypes.ResultField, error) {
 
 	// Start the query
 	startQueryInput := &cw.StartQueryInput{
@@ -108,7 +101,7 @@ func (c *CloudWatchClient) QueryLogs(logGroup, query string, startTime, endTime 
 	}
 
 	// Poll for query results
-	var results []QueryResult
+	var results [][]cwTypes.ResultField
 	for {
 		queryResultsInput := &cw.GetQueryResultsInput{
 			QueryId: startQueryOutput.QueryId,
@@ -123,31 +116,7 @@ func (c *CloudWatchClient) QueryLogs(logGroup, query string, startTime, endTime 
 		if queryResults.Status == cwTypes.QueryStatusComplete {
 			// Process results
 			for _, result := range queryResults.Results {
-				// Initialize variables for result fields
-				var timestamp time.Time
-				var streamName, message string
-
-				// Extract fields from the result
-				for _, field := range result {
-					switch aws.ToString(field.Field) {
-					case "@timestamp":
-						t, err := time.Parse(time.RFC3339, aws.ToString(field.Value))
-						if err != nil {
-							continue
-						}
-						timestamp = t
-					case "@logStream":
-						streamName = aws.ToString(field.Value)
-					case "@message":
-						message = aws.ToString(field.Value)
-					}
-				}
-
-				results = append(results, QueryResult{
-					LogStreamName: streamName,
-					Timestamp:     timestamp,
-					Message:       message,
-				})
+				results = append(results, result)
 			}
 			break
 		} else if queryResults.Status == cwTypes.QueryStatusFailed {

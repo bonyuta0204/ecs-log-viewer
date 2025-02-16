@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
-	"sort"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -102,7 +102,7 @@ func runApp(c *cli.Context) error {
 	fmt.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
 	fmt.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
 
-	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, []string{"@timestamp", "@logStream", "@message"}, runOption.filter)
+	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, []string{"@message"}, runOption.filter)
 
 	if runOption.web {
 		consoleURL := cloudwatchclient.BuildConsoleURL(cfg.Region, logGroup, query, runOption.duration)
@@ -121,17 +121,9 @@ func runApp(c *cli.Context) error {
 		return nil
 	}
 
-	// Sort results by timestamp
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Timestamp.Before(results[j].Timestamp)
-	})
-
-	// Print results
-	for _, result := range results {
-		fmt.Printf("[%s] %s: %s\n",
-			result.Timestamp.Format(time.RFC3339),
-			result.LogStreamName,
-			result.Message)
+	// Write results to CSV
+	if err := cloudwatchclient.WriteLogEventsCSV(os.Stdout, results, false); err != nil {
+		return fmt.Errorf("failed to write results to CSV: %v", err)
 	}
 
 	return nil

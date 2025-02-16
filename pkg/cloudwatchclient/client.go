@@ -9,8 +9,21 @@ import (
 	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
+type CloudWatchClient struct {
+	ctx    context.Context
+	client *cw.Client
+}
+
+// NewCloudWatchClient creates a new CloudWatchClient.
+func NewCloudWatchClient(ctx context.Context, client *cw.Client) *CloudWatchClient {
+	return &CloudWatchClient{
+		ctx:    ctx,
+		client: client,
+	}
+}
+
 // ListLogStreams retrieves CloudWatch log streams from a log group that match the provided prefix.
-func ListLogStreams(ctx context.Context, client *cw.Client, logGroup, prefix string) ([]cwTypes.LogStream, error) {
+func (c *CloudWatchClient) ListLogStreams(logGroup, prefix string) ([]cwTypes.LogStream, error) {
 	var streams []cwTypes.LogStream
 	input := &cw.DescribeLogStreamsInput{
 		LogGroupName:        aws.String(logGroup),
@@ -20,7 +33,7 @@ func ListLogStreams(ctx context.Context, client *cw.Client, logGroup, prefix str
 	}
 
 	for {
-		resp, err := client.DescribeLogStreams(ctx, input)
+		resp, err := c.client.DescribeLogStreams(c.ctx, input)
 		if err != nil {
 			return nil, err
 		}
@@ -34,7 +47,7 @@ func ListLogStreams(ctx context.Context, client *cw.Client, logGroup, prefix str
 }
 
 // GetLogEvents retrieves log events from a specific log stream.
-func GetLogEvents(ctx context.Context, client *cw.Client, logGroup, logStream string) ([]LogEvent, error) {
+func (c *CloudWatchClient) GetLogEvents(logGroup, logStream string) ([]LogEvent, error) {
 	var events []LogEvent
 	input := &cw.GetLogEventsInput{
 		LogGroupName:  aws.String(logGroup),
@@ -43,7 +56,7 @@ func GetLogEvents(ctx context.Context, client *cw.Client, logGroup, logStream st
 	}
 
 	for {
-		resp, err := client.GetLogEvents(ctx, input)
+		resp, err := c.client.GetLogEvents(c.ctx, input)
 		if err != nil {
 			return nil, err
 		}

@@ -27,11 +27,11 @@ func main() {
 		log.Fatalf("unable to load AWS SDK config: %v", err)
 	}
 
-	ecsClient := ecs.NewFromConfig(cfg)
-	logsClient := cw.NewFromConfig(cfg)
+	ecsClient := ecsclient.NewEcsClient(ctx, ecs.NewFromConfig(cfg))
+	logsClient := cloudwatchclient.NewCloudWatchClient(ctx, cw.NewFromConfig(cfg))
 
 	// 1. List ECS clusters
-	clusters, err := ecsclient.ListClusters(ctx, ecsClient)
+	clusters, err := ecsClient.ListClusters()
 	if err != nil {
 		log.Fatalf("failed to list clusters: %v", err)
 	}
@@ -50,7 +50,7 @@ func main() {
 	fmt.Printf("Selected cluster: %s\n", selectedCluster)
 
 	// 2. List running tasks in the cluster
-	taskArns, err := ecsclient.ListRunningTasks(ctx, ecsClient, selectedCluster)
+	taskArns, err := ecsClient.ListRunningTasks(selectedCluster)
 	if err != nil {
 		log.Fatalf("failed to list running tasks: %v", err)
 	}
@@ -59,7 +59,7 @@ func main() {
 	}
 
 	// Describe tasks to get task definition ARNs.
-	tasks, err := ecsclient.DescribeTasks(ctx, ecsClient, selectedCluster, taskArns)
+	tasks, err := ecsClient.DescribeTasks(selectedCluster, taskArns)
 	if err != nil {
 		log.Fatalf("failed to describe tasks: %v", err)
 	}
@@ -85,7 +85,7 @@ func main() {
 	fmt.Printf("Selected Task Definition: %s\n", selectedTaskDefArn)
 
 	// 3. Describe the Task Definition to obtain container definitions.
-	taskDef, err := ecsclient.DescribeTaskDefinition(ctx, ecsClient, selectedTaskDefArn)
+	taskDef, err := ecsClient.DescribeTaskDefinition(selectedTaskDefArn)
 	if err != nil {
 		log.Fatalf("failed to describe task definition: %v", err)
 	}
@@ -120,7 +120,7 @@ func main() {
 	fmt.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
 
 	// 5. List CloudWatch log streams with the given prefix.
-	streams, err := cloudwatchclient.ListLogStreams(ctx, logsClient, logGroup, logStreamPrefix)
+	streams, err := logsClient.ListLogStreams(logGroup, logStreamPrefix)
 	if err != nil {
 		log.Fatalf("failed to list log streams: %v", err)
 	}
@@ -131,7 +131,7 @@ func main() {
 	// 6. Retrieve and merge logs from each log stream.
 	var allEvents []cloudwatchclient.LogEvent
 	for _, stream := range streams {
-		events, err := cloudwatchclient.GetLogEvents(ctx, logsClient, logGroup, aws.ToString(stream.LogStreamName))
+		events, err := logsClient.GetLogEvents(logGroup, aws.ToString(stream.LogStreamName))
 		if err != nil {
 			log.Printf("error fetching logs for stream %s: %v", aws.ToString(stream.LogStreamName), err)
 			continue

@@ -8,12 +8,25 @@ import (
 	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
+type EcsClient struct {
+	ctx    context.Context
+	client *ecs.Client
+}
+
+// NewEcsClient creates a new EcsClient.
+func NewEcsClient(ctx context.Context, client *ecs.Client) *EcsClient {
+	return &EcsClient{
+		ctx:    ctx,
+		client: client,
+	}
+}
+
 // ListClusters retrieves all ECS cluster ARNs.
-func ListClusters(ctx context.Context, client *ecs.Client) ([]string, error) {
+func (e *EcsClient) ListClusters() ([]string, error) {
 	var clusters []string
 	input := &ecs.ListClustersInput{}
 	for {
-		resp, err := client.ListClusters(ctx, input)
+		resp, err := e.client.ListClusters(e.ctx, input)
 		if err != nil {
 			return nil, err
 		}
@@ -27,14 +40,14 @@ func ListClusters(ctx context.Context, client *ecs.Client) ([]string, error) {
 }
 
 // ListRunningTasks lists running tasks in the given cluster.
-func ListRunningTasks(ctx context.Context, client *ecs.Client, cluster string) ([]string, error) {
+func (e *EcsClient) ListRunningTasks(cluster string) ([]string, error) {
 	var tasks []string
 	input := &ecs.ListTasksInput{
 		Cluster:       aws.String(cluster),
 		DesiredStatus: ecsTypes.DesiredStatusRunning,
 	}
 	for {
-		resp, err := client.ListTasks(ctx, input)
+		resp, err := e.client.ListTasks(e.ctx, input)
 		if err != nil {
 			return nil, err
 		}
@@ -48,12 +61,12 @@ func ListRunningTasks(ctx context.Context, client *ecs.Client, cluster string) (
 }
 
 // DescribeTasks calls ECS to describe a list of tasks.
-func DescribeTasks(ctx context.Context, client *ecs.Client, cluster string, taskArns []string) ([]ecsTypes.Task, error) {
+func (e *EcsClient) DescribeTasks(cluster string, taskArns []string) ([]ecsTypes.Task, error) {
 	input := &ecs.DescribeTasksInput{
 		Cluster: aws.String(cluster),
 		Tasks:   taskArns,
 	}
-	resp, err := client.DescribeTasks(ctx, input)
+	resp, err := e.client.DescribeTasks(e.ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -61,11 +74,11 @@ func DescribeTasks(ctx context.Context, client *ecs.Client, cluster string, task
 }
 
 // DescribeTaskDefinition retrieves details for a task definition.
-func DescribeTaskDefinition(ctx context.Context, client *ecs.Client, taskDefArn string) (*ecsTypes.TaskDefinition, error) {
+func (e *EcsClient) DescribeTaskDefinition(taskDefArn string) (*ecsTypes.TaskDefinition, error) {
 	input := &ecs.DescribeTaskDefinitionInput{
 		TaskDefinition: aws.String(taskDefArn),
 	}
-	resp, err := client.DescribeTaskDefinition(ctx, input)
+	resp, err := e.client.DescribeTaskDefinition(e.ctx, input)
 	if err != nil {
 		return nil, err
 	}

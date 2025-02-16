@@ -1,14 +1,19 @@
 DIST     := bin
 BINARIES := $(DIST)/ecs-log-viewer
-SOURCES  := $(wildcard *.go)
+SOURCES  := $(shell find . -name '*.go')
 
-.PHONY: build clean run
+.PHONY: all build clean run
+
+$(DIST):
+	mkdir -p $(DIST)
+
+$(BINARIES): $(DIST) $(SOURCES)
+	go build -o $(BINARIES) ./cmd
 
 build: $(BINARIES)
-	go build -o $(DIST)/ecs-log-viewer
 
 run: build
-	$(DIST)/ecs-log-viewer
+	$(BINARIES)
 
 clean:
 	rm -rf $(DIST)

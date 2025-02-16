@@ -3,26 +3,35 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"sort"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/urfave/cli/v2"
 
 	"github.com/bonyuta0204/ecs-log-viewer/pkg/cloudwatchclient"
 	"github.com/bonyuta0204/ecs-log-viewer/pkg/ecsclient"
 	"github.com/bonyuta0204/ecs-log-viewer/pkg/selector"
 )
 
-func main() {
+func runApp(c *cli.Context) error {
 	ctx := context.Background()
 
-	// Load AWS configuration (profile, region, etc. will be loaded from your environment/config files)
-	cfg, err := config.LoadDefaultConfig(ctx)
+	// Load AWS configuration with profile and region from CLI flags
+	opts := []func(*config.LoadOptions) error{}
+
+	if profile := c.String("profile"); profile != "" {
+		opts = append(opts, config.WithSharedConfigProfile(profile))
+	}
+	if region := c.String("region"); region != "" {
+		opts = append(opts, config.WithRegion(region))
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
-		log.Fatalf("unable to load AWS SDK config: %v", err)
+		return fmt.Errorf("unable to load AWS SDK config: %v", err)
 	}
 
 	ecsClient := ecsclient.NewEcsClient(ctx, ecs.NewFromConfig(cfg))
@@ -31,43 +40,43 @@ func main() {
 	// 1. List Task Definition Families
 	taskDefFamilies, err := ecsClient.ListTaskDefinitionFamilies()
 	if err != nil {
-		log.Fatalf("failed to list task definition families: %v", err)
+		return fmt.Errorf("failed to list task definition families: %v", err)
 	}
 	if len(taskDefFamilies) == 0 {
-		log.Fatalf("no task definition families found")
+		return fmt.Errorf("no task definition families found")
 	}
 
 	taskDefFamily, err := selector.SelectItem(taskDefFamilies, "Select Task Definition Family > ")
 	if err != nil {
-		log.Fatalf("task definition family selection aborted: %v", err)
+		return fmt.Errorf("task definition family selection aborted: %v", err)
 	}
 
 	// 2. Describe the latest task definition for the selected family
 	taskDef, err := ecsClient.DescribeLatestTaskDefinition(taskDefFamily)
 	if err != nil {
-		log.Fatalf("failed to describe latest task definition: %v", err)
+		return fmt.Errorf("failed to describe latest task definition: %v", err)
 	}
 
-	// 3. Select a container definition using fuzzyfinder.
+	// 3. Select a container definition using selector
 	containerDef, err := selector.SelectContainerDefinition(taskDef.ContainerDefinitions, "Select Container Definition > ")
 	if err != nil {
-		log.Fatalf("container definition selection aborted: %v", err)
+		return fmt.Errorf("container definition selection aborted: %v", err)
 	}
 
-	// 4. Extract log configuration from the selected container.
-	opts := containerDef.LogConfiguration.Options
-	logGroup, ok := opts["awslogs-group"]
+	// 4. Extract log configuration from the selected container
+	logOpts := containerDef.LogConfiguration.Options
+	logGroup, ok := logOpts["awslogs-group"]
 	if !ok {
-		log.Fatalf("awslogs-group not set in log configuration")
+		return fmt.Errorf("awslogs-group not set in log configuration")
 	}
-	logStreamPrefix, ok := opts["awslogs-stream-prefix"]
+	logStreamPrefix, ok := logOpts["awslogs-stream-prefix"]
 	if !ok {
-		log.Fatalf("awslogs-stream-prefix not set in log configuration")
+		return fmt.Errorf("awslogs-stream-prefix not set in log configuration")
 	}
 
-	// Query logs from the last 24 hours
+	// Query logs using the duration from CLI flag
 	endTime := time.Now()
-	startTime := endTime.Add(-24 * time.Hour)
+	startTime := endTime.Add(-c.Duration("duration"))
 
 	fmt.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
 	fmt.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
@@ -75,12 +84,12 @@ func main() {
 	// Query logs using the new method
 	results, err := logsClient.QueryLogsByStreamPrefix(logGroup, logStreamPrefix, startTime, endTime)
 	if err != nil {
-		log.Fatalf("failed to query logs: %v", err)
+		return fmt.Errorf("failed to query logs: %v", err)
 	}
 
 	if len(results) == 0 {
 		fmt.Println("No logs found in the specified time range")
-		return
+		return nil
 	}
 
 	// Sort results by timestamp
@@ -95,4 +104,6 @@ func main() {
 			result.LogStreamName,
 			result.Message)
 	}
+
+	return nil
 }

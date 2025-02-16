@@ -54,11 +54,12 @@ ecs-log-viewer [options]
 
 ### Options
 
-- `--profile, -p`: AWS profile to use (can also be set via AWS_PROFILE environment variable)
-- `--region, -r`: AWS region to use (can also be set via AWS_REGION environment variable)
-- `--duration, -d`: Duration to fetch logs for (e.g., 24h, 1h, 30m) (default: 24h)
-- `--filter, -f`: String pattern to filter log messages
-- `--web`: Start in web mode, launching a web interface instead of CLI
+- `--profile, -p`: AWS profile name to use for authentication (can also be set via AWS_PROFILE environment variable)
+- `--region, -r`: AWS region where your ECS clusters are located (can also be set via AWS_REGION environment variable)
+- `--duration, -d`: Time range to fetch logs from (e.g., 24h, 1h, 30m). Defaults to last 24 hours
+- `--filter, -f`: Filter pattern to search for in log messages
+- `--fields`: Comma-separated list of log fields to display (e.g., @message,@timestamp). Default: @message
+- `--web, -w`: Open logs in AWS CloudWatch Console instead of viewing in terminal
 
 ### Example
 
@@ -72,10 +73,13 @@ ecs-log-viewer --duration 1h
 # View logs containing specific text
 ecs-log-viewer --filter "error"
 
-# Start in web mode
+# Display specific log fields
+ecs-log-viewer --fields @timestamp,@message,@logStream
+
+# Open in AWS CloudWatch Console
 ecs-log-viewer --web
 
-# Start web mode with filter and duration options
+# Open in CloudWatch Console with filter and duration options
 ecs-log-viewer --web --filter "error" --duration 2h
 ```
 

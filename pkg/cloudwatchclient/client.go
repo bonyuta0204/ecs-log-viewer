@@ -91,9 +91,8 @@ type QueryResult struct {
 	Message       string
 }
 
-// QueryLogsByStreamPrefix queries logs from streams matching the prefix within the specified time range
-func (c *CloudWatchClient) QueryLogsByStreamPrefix(logGroup, streamPrefix string, startTime, endTime time.Time, filter string) ([]QueryResult, error) {
-	query := buildCloudWatchQuery(streamPrefix, filter)
+// QueryLogs queries logs from streams matching the prefix within the specified time range
+func (c *CloudWatchClient) QueryLogs(logGroup, query string, startTime, endTime time.Time) ([]QueryResult, error) {
 
 	// Start the query
 	startQueryInput := &cw.StartQueryInput{

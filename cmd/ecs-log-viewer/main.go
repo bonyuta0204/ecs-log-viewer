@@ -36,6 +36,12 @@ func main() {
 				Aliases: []string{"f"},
 				Usage:   "Filter logs by keyword",
 			},
+			&cli.BoolFlag{
+				Name:    "web",
+				Aliases: []string{"w"},
+				Usage:   "Open logs in AWS Console instead of terminal",
+				Value:   false,
+			},
 		},
 		Action: runApp,
 	}

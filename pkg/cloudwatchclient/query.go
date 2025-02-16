@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// buildCloudWatchQuery constructs a CloudWatch Logs Insights query string with proper escaping
-func buildCloudWatchQuery(streamPrefix, filter string) string {
+// BuildCloudWatchQuery constructs a CloudWatch Logs Insights query string with proper escaping
+func BuildCloudWatchQuery(streamPrefix, filter string) string {
 	// Base query that selects required fields and filters by stream prefix
 	query := fmt.Sprintf("fields @timestamp, @logStream, @message | filter @logStream like /%s/", streamPrefix)
 

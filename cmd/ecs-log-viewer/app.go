@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"sort"
 	"time"
 
@@ -21,6 +23,7 @@ type AppOption struct {
 	region   string
 	duration time.Duration
 	filter   string
+	web      bool
 }
 
 func newAppOption(c *cli.Context) AppOption {
@@ -29,6 +32,7 @@ func newAppOption(c *cli.Context) AppOption {
 		region:   c.String("region"),
 		duration: c.Duration("duration"),
 		filter:   c.String("filter"),
+		web:      c.Bool("web"),
 	}
 }
 
@@ -98,8 +102,16 @@ func runApp(c *cli.Context) error {
 	fmt.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
 	fmt.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
 
+	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, runOption.filter)
+
+	if runOption.web {
+		consoleURL := cloudwatchclient.BuildConsoleURL(cfg.Region, logGroup, query)
+		fmt.Printf("Opening AWS Console URL: %s\n", consoleURL)
+		return openBrowser(consoleURL)
+	}
+
 	// Query logs using the new method
-	results, err := logsClient.QueryLogsByStreamPrefix(logGroup, logStreamPrefix, startTime, endTime, runOption.filter)
+	results, err := logsClient.QueryLogs(logGroup, query, startTime, endTime)
 	if err != nil {
 		return fmt.Errorf("failed to query logs: %v", err)
 	}
@@ -123,4 +135,23 @@ func runApp(c *cli.Context) error {
 	}
 
 	return nil
+}
+
+func openBrowser(url string) error {
+	return open("https://" + url)
+}
+
+func open(url string) error {
+	var err error = nil
+	switch {
+	case runtime.GOOS == "linux":
+		err = exec.Command("xdg-open", url).Start()
+	case runtime.GOOS == "windows":
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case runtime.GOOS == "darwin":
+		err = exec.Command("open", url).Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+	return err
 }

@@ -2,7 +2,7 @@ package cloudwatchclient
 
 import "testing"
 
-func Test_buildCloudWatchQuery(t *testing.T) {
+func Test_BuildCloudWatchQuery(t *testing.T) {
 	tests := []struct {
 		name         string
 		streamPrefix string
@@ -37,9 +37,9 @@ func Test_buildCloudWatchQuery(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildCloudWatchQuery(tt.streamPrefix, tt.filter)
+			got := BuildCloudWatchQuery(tt.streamPrefix, tt.filter)
 			if got != tt.want {
-				t.Errorf("buildCloudWatchQuery() = %v, want %v", got, tt.want)
+				t.Errorf("BuildCloudWatchQuery() = %v, want %v", got, tt.want)
 			}
 		})
 	}

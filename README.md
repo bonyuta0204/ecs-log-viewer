@@ -22,13 +22,13 @@ A CLI tool for interactively browsing and retrieving logs from AWS CloudWatch fo
 If you have Go 1.24 or later installed:
 
 ```bash
-go install github.com/bonyuta0204/ecs-log-viewer/cmd@latest
+go install github.com/bonyuta0204/ecs-log-viewer/cmd/ecs-log-viewer@latest
 ```
 
 This will install the latest released version. To install a specific version:
 
 ```bash
-go install github.com/bonyuta0204/ecs-log-viewer/cmd@v0.1.0
+go install github.com/bonyuta0204/ecs-log-viewer/cmd/ecs-log-viewer@v0.1.0
 ```
 
 ### Direct Download

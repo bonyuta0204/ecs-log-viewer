@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 
+	"github.com/bonyuta0204/ecs-log-viewer/pkg/cloudwatchclient"
 	"github.com/bonyuta0204/ecs-log-viewer/pkg/ecsclient"
 	"github.com/bonyuta0204/ecs-log-viewer/pkg/selector"
 )
@@ -22,7 +26,7 @@ func main() {
 	}
 
 	ecsClient := ecsclient.NewEcsClient(ctx, ecs.NewFromConfig(cfg))
-	// logsClient := cloudwatchclient.NewCloudWatchClient(ctx, cw.NewFromConfig(cfg))
+	logsClient := cloudwatchclient.NewCloudWatchClient(ctx, cloudwatchlogs.NewFromConfig(cfg))
 
 	// 1. List Task Definition Families
 	taskDefFamilies, err := ecsClient.ListTaskDefinitionFamilies()
@@ -61,35 +65,34 @@ func main() {
 		log.Fatalf("awslogs-stream-prefix not set in log configuration")
 	}
 
+	// Query logs from the last 24 hours
+	endTime := time.Now()
+	startTime := endTime.Add(-24 * time.Hour)
+
 	fmt.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
+	fmt.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
 
-	// // 5. List CloudWatch log streams with the given prefix.
-	// streams, err := logsClient.ListLogStreams(logGroup, logStreamPrefix)
-	// if err != nil {
-	// 	log.Fatalf("failed to list log streams: %v", err)
-	// }
-	// if len(streams) == 0 {
-	// 	log.Fatalf("no log streams found for prefix %s", logStreamPrefix)
-	// }
+	// Query logs using the new method
+	results, err := logsClient.QueryLogsByStreamPrefix(logGroup, logStreamPrefix, startTime, endTime)
+	if err != nil {
+		log.Fatalf("failed to query logs: %v", err)
+	}
 
-	// // 6. Retrieve and merge logs from each log stream.
-	// var allEvents []cloudwatchclient.LogEvent
-	// for _, stream := range streams {
-	// 	events, err := logsClient.GetLogEvents(logGroup, aws.ToString(stream.LogStreamName))
-	// 	if err != nil {
-	// 		log.Printf("error fetching logs for stream %s: %v", aws.ToString(stream.LogStreamName), err)
-	// 		continue
-	// 	}
-	// 	allEvents = append(allEvents, events...)
-	// }
+	if len(results) == 0 {
+		fmt.Println("No logs found in the specified time range")
+		return
+	}
 
-	// // Sort all events by timestamp.
-	// sort.Slice(allEvents, func(i, j int) bool {
-	// 	return allEvents[i].Timestamp.Before(allEvents[j].Timestamp)
-	// })
+	// Sort results by timestamp
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Timestamp.Before(results[j].Timestamp)
+	})
 
-	// // 7. Print merged logs.
-	// for _, evt := range allEvents {
-	// 	fmt.Printf("%s: %s\n", evt.Timestamp.Format(time.RFC3339), evt.Message)
-	// }
+	// Print results
+	for _, result := range results {
+		fmt.Printf("[%s] %s: %s\n",
+			result.Timestamp.Format(time.RFC3339),
+			result.LogStreamName,
+			result.Message)
+	}
 }

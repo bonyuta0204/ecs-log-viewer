@@ -36,6 +36,11 @@ func main() {
 				Aliases: []string{"f"},
 				Usage:   "Filter logs by keyword",
 			},
+			&cli.StringSliceFlag{
+				Name:  "fields",
+				Usage: "Fields to display",
+				Value: cli.NewStringSlice("@message"),
+			},
 			&cli.BoolFlag{
 				Name:    "web",
 				Aliases: []string{"w"},

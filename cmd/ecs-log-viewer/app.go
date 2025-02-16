@@ -24,6 +24,7 @@ type AppOption struct {
 	duration time.Duration
 	filter   string
 	web      bool
+	fields   []string
 }
 
 func newAppOption(c *cli.Context) AppOption {
@@ -33,6 +34,7 @@ func newAppOption(c *cli.Context) AppOption {
 		duration: c.Duration("duration"),
 		filter:   c.String("filter"),
 		web:      c.Bool("web"),
+		fields:   c.StringSlice("fields"),
 	}
 }
 
@@ -102,7 +104,7 @@ func runApp(c *cli.Context) error {
 	fmt.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
 	fmt.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
 
-	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, []string{"@message"}, runOption.filter)
+	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, runOption.fields, runOption.filter)
 
 	if runOption.web {
 		consoleURL := cloudwatchclient.BuildConsoleURL(cfg.Region, logGroup, query, runOption.duration)

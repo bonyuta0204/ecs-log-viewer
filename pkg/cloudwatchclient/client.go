@@ -115,9 +115,7 @@ func (c *CloudWatchClient) QueryLogs(logGroup, query string, startTime, endTime 
 		// Check if query is complete
 		if queryResults.Status == cwTypes.QueryStatusComplete {
 			// Process results
-			for _, result := range queryResults.Results {
-				results = append(results, result)
-			}
+			results = append(results, queryResults.Results...)
 			break
 		} else if queryResults.Status == cwTypes.QueryStatusFailed {
 			return nil, fmt.Errorf("query failed: %v", queryResults.Statistics)

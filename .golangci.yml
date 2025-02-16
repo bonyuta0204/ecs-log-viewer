@@ -2,11 +2,20 @@ linters:
   enable:
     - gofmt
     - govet
-    - golint
+    - revive
     - errcheck
     - staticcheck
     - gosimple
     - ineffassign
+    - gocyclo
+    - misspell
 
 issues:
   exclude-use-default: false
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+        disabled: false

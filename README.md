@@ -59,6 +59,7 @@ ecs-log-viewer [options]
 - `--duration, -d`: Time range to fetch logs from (e.g., 24h, 1h, 30m). Defaults to last 24 hours
 - `--filter, -f`: Filter pattern to search for in log messages
 - `--fields`: Comma-separated list of log fields to display (e.g., @message,@timestamp). Default: @message
+- `--output, -o`: Output file path for saving logs. Defaults to stdout if not specified
 - `--web, -w`: Open logs in AWS CloudWatch Console instead of viewing in terminal
 
 ### Example
@@ -75,6 +76,12 @@ ecs-log-viewer --filter "error"
 
 # Display specific log fields
 ecs-log-viewer --fields @timestamp,@message,@logStream
+
+# Save logs to a file
+ecs-log-viewer --output logs.csv
+
+# Save filtered logs from the last hour to a file
+ecs-log-viewer --duration 1h --filter "error" --output error_logs.csv
 
 # Open in AWS CloudWatch Console
 ecs-log-viewer --web

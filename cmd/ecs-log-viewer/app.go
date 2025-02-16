@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -26,6 +27,7 @@ type AppOption struct {
 	filter   string
 	web      bool
 	fields   []string
+	output   string
 }
 
 func newAppOption(c *cli.Context) AppOption {
@@ -36,6 +38,7 @@ func newAppOption(c *cli.Context) AppOption {
 		filter:   c.String("filter"),
 		web:      c.Bool("web"),
 		fields:   c.StringSlice("fields"),
+		output:   c.String("output"),
 	}
 }
 
@@ -124,9 +127,35 @@ func runApp(c *cli.Context) error {
 		return nil
 	}
 
+	var writer io.Writer
+	var file *os.File
+	if runOption.output == "" {
+		writer = os.Stdout
+	} else {
+		var err error
+		file, err = os.Create(runOption.output)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %v", err)
+		}
+		writer = file
+	}
+
 	// Write results to CSV
-	if err := cloudwatchclient.WriteLogEventsCSV(os.Stdout, results, false); err != nil {
+	if err := cloudwatchclient.WriteLogEventsCSV(writer, results, false); err != nil {
+		if file != nil {
+			err = file.Close()
+			if err != nil {
+				return fmt.Errorf("failed to close output file: %v", err)
+			}
+		}
 		return fmt.Errorf("failed to write results to CSV: %v", err)
+	}
+
+	if file != nil {
+		if err := file.Close(); err != nil {
+			return fmt.Errorf("failed to close output file: %v", err)
+		}
+		fmt.Printf("Wrote results to CSV file: %s\n", runOption.output)
 	}
 
 	return nil

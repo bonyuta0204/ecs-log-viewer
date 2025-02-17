@@ -1,8 +1,8 @@
 package selector
 
 import (
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
-	"github.com/manifoldco/promptui"
 )
 
 // selectorItem represents an item that can be selected through the interactive selector
@@ -16,18 +16,28 @@ func SelectItem[T selectorItem](items []T, prompt string) (T, error) {
 	for i, item := range items {
 		labels[i] = item.Label()
 	}
-	selector := promptui.Select{
-		Label: prompt,
-		Items: labels,
+	answer := ""
+	option := &survey.Select{
+		Message: prompt,
+		Options: labels,
 	}
+	err := survey.AskOne(option, &answer)
 
-	i, _, err := selector.Run()
 	if err != nil {
 		var zero T
 		return zero, err
 	}
 
-	return items[i], nil
+	var result T
+
+	for i, item := range items {
+		if labels[i] == answer {
+			result = item
+			break
+		}
+	}
+
+	return result, nil
 }
 
 // SelectContainerDefinition presents a list of container definitions to the user and returns the selected one
@@ -36,16 +46,24 @@ func SelectContainerDefinition(containerDefinitions []types.ContainerDefinition,
 	for i, item := range containerDefinitions {
 		labels[i] = *item.Name
 	}
-	selector := promptui.Select{
-		Label: prompt,
-		Items: labels,
+	answer := ""
+	option := &survey.Select{
+		Message: prompt,
+		Options: labels,
 	}
+	err := survey.AskOne(option, &answer)
 
-	i, _, err := selector.Run()
 	if err != nil {
-		var zero types.ContainerDefinition
-		return zero, err
+		return types.ContainerDefinition{}, err
 	}
 
-	return containerDefinitions[i], nil
+	var result types.ContainerDefinition
+	for i, item := range containerDefinitions {
+		if labels[i] == answer {
+			result = item
+			break
+		}
+	}
+
+	return result, nil
 }

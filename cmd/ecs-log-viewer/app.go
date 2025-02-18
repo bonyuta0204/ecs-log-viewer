@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"runtime"
@@ -22,14 +23,16 @@ import (
 
 // AppOption contains configuration options for the ECS log viewer application
 type AppOption struct {
-	profile  string
-	region   string
-	duration time.Duration
-	filter   string
-	web      bool
-	fields   []string
-	output   string
-	format   string
+	profile   string
+	region    string
+	duration  time.Duration
+	taskdef   string
+	container string
+	filter    string
+	web       bool
+	fields    []string
+	output    string
+	format    string
 }
 
 func (o *AppOption) validate() error {
@@ -49,14 +52,16 @@ func (o *AppOption) validate() error {
 
 func newAppOption(c *cli.Context) AppOption {
 	return AppOption{
-		profile:  c.String("profile"),
-		region:   c.String("region"),
-		duration: c.Duration("duration"),
-		filter:   c.String("filter"),
-		web:      c.Bool("web"),
-		fields:   c.StringSlice("fields"),
-		output:   c.String("output"),
-		format:   c.String("format"),
+		profile:   c.String("profile"),
+		region:    c.String("region"),
+		duration:  c.Duration("duration"),
+		taskdef:   c.String("taskdef"),
+		container: c.String("container"),
+		filter:    c.String("filter"),
+		web:       c.Bool("web"),
+		fields:    c.StringSlice("fields"),
+		output:    c.String("output"),
+		format:    c.String("format"),
 	}
 }
 
@@ -77,18 +82,26 @@ func setupAWSConfig(ctx context.Context, runOption AppOption) (aws.Config, error
 	return cfg, nil
 }
 
-func selectTaskAndContainer(ecsClient *ecsclient.EcsClient) (*ecsTypes.TaskDefinition, *ecsTypes.ContainerDefinition, error) {
-	taskDefFamilies, err := ecsClient.ListTaskDefinitionFamilies()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to list task definition families: %v", err)
-	}
-	if len(taskDefFamilies) == 0 {
-		return nil, nil, fmt.Errorf("no task definition families found")
-	}
+func selectTaskAndContainer(ecsClient *ecsclient.EcsClient, appOption AppOption) (*ecsTypes.TaskDefinition, *ecsTypes.ContainerDefinition, error) {
 
-	taskDefFamily, err := selector.SelectItem(taskDefFamilies, "Select Task Definition Family > ")
-	if err != nil {
-		return nil, nil, fmt.Errorf("task definition family selection aborted: %v", err)
+	var taskDefFamily ecsclient.TaskDefFamily
+
+	if appOption.taskdef == "" {
+
+		taskDefFamilies, err := ecsClient.ListTaskDefinitionFamilies()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to list task definition families: %v", err)
+		}
+		if len(taskDefFamilies) == 0 {
+			return nil, nil, fmt.Errorf("no task definition families found")
+		}
+
+		taskDefFamily, err = selector.SelectItem(taskDefFamilies, "Select Task Definition Family > ")
+		if err != nil {
+			return nil, nil, fmt.Errorf("task definition family selection aborted: %v", err)
+		}
+	} else {
+		taskDefFamily = ecsclient.TaskDefFamily{Name: appOption.taskdef}
 	}
 
 	taskDef, err := ecsClient.DescribeLatestTaskDefinition(taskDefFamily)
@@ -96,9 +109,24 @@ func selectTaskAndContainer(ecsClient *ecsclient.EcsClient) (*ecsTypes.TaskDefin
 		return nil, nil, fmt.Errorf("failed to describe latest task definition: %v", err)
 	}
 
-	containerDef, err := selector.SelectContainerDefinition(taskDef.ContainerDefinitions, "Select Container Definition > ")
-	if err != nil {
-		return nil, nil, fmt.Errorf("container definition selection aborted: %v", err)
+	var containerDef ecsTypes.ContainerDefinition
+
+	if appOption.container == "" {
+
+		containerDef, err = selector.SelectContainerDefinition(taskDef.ContainerDefinitions, "Select Container Definition > ")
+		if err != nil {
+			return nil, nil, fmt.Errorf("container definition selection aborted: %v", err)
+		}
+	} else {
+		for _, container := range taskDef.ContainerDefinitions {
+			if *container.Name == appOption.container {
+				containerDef = container
+				break
+			}
+		}
+		if containerDef.Name == nil {
+			return nil, nil, fmt.Errorf("Cannot find container: %s", appOption.container)
+		}
 	}
 
 	return taskDef, &containerDef, nil
@@ -131,7 +159,7 @@ func writeResults(results [][]cwTypes.ResultField, output string, format string)
 		}
 		defer func() {
 			if err := file.Close(); err != nil {
-				fmt.Printf("Warning: failed to close output file: %v\n", err)
+				log.Printf("Warning: failed to close output file: %v\n", err)
 			}
 		}()
 		writer = file
@@ -143,7 +171,7 @@ func writeResults(results [][]cwTypes.ResultField, output string, format string)
 	}
 
 	if output != "" {
-		fmt.Printf("Wrote results in %s format to file: %s\n", format, output)
+		log.Printf("Wrote results in %s format to file: %s\n", format, output)
 	}
 
 	return nil
@@ -152,6 +180,7 @@ func writeResults(results [][]cwTypes.ResultField, output string, format string)
 func runApp(c *cli.Context) error {
 	ctx := context.Background()
 	runOption := newAppOption(c)
+	log.SetFlags(0)
 
 	err := runOption.validate()
 	if err != nil {
@@ -166,7 +195,7 @@ func runApp(c *cli.Context) error {
 	ecsClient := ecsclient.NewEcsClient(ctx, &cfg)
 	logsClient := cloudwatchclient.NewCloudWatchClient(ctx, &cfg)
 
-	_, containerDef, err := selectTaskAndContainer(ecsClient)
+	_, containerDef, err := selectTaskAndContainer(ecsClient, runOption)
 	if err != nil {
 		return err
 	}
@@ -179,14 +208,14 @@ func runApp(c *cli.Context) error {
 	endTime := time.Now()
 	startTime := endTime.Add(-runOption.duration)
 
-	fmt.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
-	fmt.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
+	log.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
+	log.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
 
 	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, runOption.fields, runOption.filter)
 
 	if runOption.web {
 		consoleURL := cloudwatchclient.BuildConsoleURL(cfg.Region, logGroup, query, runOption.duration)
-		fmt.Printf("Opening AWS Console URL: %s\n", consoleURL)
+		log.Printf("Opening AWS Console URL: %s\n", consoleURL)
 		return openBrowser(consoleURL)
 	}
 
@@ -196,7 +225,7 @@ func runApp(c *cli.Context) error {
 	}
 
 	if len(results) == 0 {
-		fmt.Println("No logs found in the specified time range")
+		log.Println("No logs found in the specified time range")
 		return nil
 	}
 

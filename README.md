@@ -59,6 +59,8 @@ ecs-log-viewer [options]
 - `--region, -r`: AWS region where your ECS clusters are located (can also be set via AWS_REGION environment variable)
 - `--duration, -d`: Time range to fetch logs from (e.g., 24h, 1h, 30m). Defaults to last 24 hours
 - `--filter, -f`: Filter pattern to search for in log messages
+- `--taskdef, -t`: ECS task definition family name. If not specified, you will be prompted to select one interactively
+- `--container, -c`: Container name within the task definition. If not specified, you will be prompted to select one interactively
 - `--fields`: Comma-separated list of log fields to display (e.g., @message,@timestamp). Default: @message
 - `--output, -o`: Output file path for saving logs. Defaults to stdout if not specified
 - `--format`: Output format (simple, csv, json). Default: csv

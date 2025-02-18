@@ -9,7 +9,7 @@ import (
 func BuildCloudWatchQuery(streamPrefix string, fields []string, filter string) string {
 	// Base query that selects required fields and filters by stream prefix
 	fieldsStr := strings.Join(fields, ", ")
-	query := fmt.Sprintf("fields %s | filter @logStream like /%s/", fieldsStr, streamPrefix)
+	query := fmt.Sprintf("fields %s | filter @logStream like \"%s\"", fieldsStr, streamPrefix)
 
 	// Add message filter if provided
 	if filter != "" {

@@ -15,28 +15,28 @@ func Test_BuildCloudWatchQuery(t *testing.T) {
 			streamPrefix: "prefix",
 			fields:       []string{"@timestamp", "@logStream", "@message"},
 			filter:       "",
-			want:         "fields @timestamp, @logStream, @message | filter @logStream like /prefix/",
+			want:         "fields @timestamp, @logStream, @message | filter @logStream like \"prefix\"",
 		},
 		{
 			name:         "query with simple filter",
 			streamPrefix: "prefix",
 			fields:       []string{"@timestamp", "@logStream", "@message"},
 			filter:       "error",
-			want:         "fields @timestamp, @logStream, @message | filter @logStream like /prefix/ | filter @message like 'error'",
+			want:         "fields @timestamp, @logStream, @message | filter @logStream like \"prefix\" | filter @message like 'error'",
 		},
 		{
 			name:         "query with filter containing single quotes",
 			fields:       []string{"@timestamp", "@logStream", "@message"},
 			streamPrefix: "prefix",
 			filter:       "can't find",
-			want:         "fields @timestamp, @logStream, @message | filter @logStream like /prefix/ | filter @message like 'can\\'t find'",
+			want:         "fields @timestamp, @logStream, @message | filter @logStream like \"prefix\" | filter @message like 'can\\'t find'",
 		},
 		{
 			name:         "query with complex stream prefix",
 			fields:       []string{"@timestamp", "@logStream", "@message"},
 			streamPrefix: "service/prod",
 			filter:       "",
-			want:         "fields @timestamp, @logStream, @message | filter @logStream like /service/prod/",
+			want:         "fields @timestamp, @logStream, @message | filter @logStream like \"service/prod\"",
 		},
 	}
 

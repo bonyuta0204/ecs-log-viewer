@@ -114,7 +114,7 @@ func getLogConfiguration(containerDef *ecsTypes.ContainerDefinition) (string, st
 	if !ok {
 		return "", "", fmt.Errorf("awslogs-stream-prefix not set in log configuration")
 	}
-	return logGroup, logStreamPrefix, nil
+	return logGroup, logStreamPrefix + "/" + *containerDef.Name, nil
 }
 
 func writeResults(results [][]cwTypes.ResultField, output string, format string) error {

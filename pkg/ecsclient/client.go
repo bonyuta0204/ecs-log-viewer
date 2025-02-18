@@ -2,6 +2,7 @@ package ecsclient
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
@@ -92,7 +93,7 @@ func (e *EcsClient) DescribeLatestTaskDefinition(family TaskDefFamily) (*ecsType
 	}
 
 	if len(resp.TaskDefinitionArns) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("No task definition found for %s", family.Name)
 	}
 
 	// Get the latest task definition

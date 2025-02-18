@@ -36,6 +36,16 @@ func main() {
 				Aliases: []string{"f"},
 				Usage:   "Filter pattern to search for in log messages",
 			},
+			&cli.StringFlag{
+				Name:    "taskdef",
+				Aliases: []string{"t"},
+				Usage:   "ECS task definition family name. If not specified, you will be prompted to select one interactively",
+			},
+			&cli.StringFlag{
+				Name:    "container",
+				Aliases: []string{"c"},
+				Usage:   "Container name within the task definition. If not specified, you will be prompted to select one interactively",
+			},
 			&cli.StringSliceFlag{
 				Name:  "fields",
 				Usage: "Comma-separated list of log fields to display (e.g., @message,@timestamp). Default: @message",

@@ -14,42 +14,43 @@ import (
 
 // mockCloudWatchLogsClient implements the CloudWatchLogsAPI interface for testing
 type mockCloudWatchLogsClient struct {
-	describeLogStreamsOutput *cw.DescribeLogStreamsOutput
-	describeLogStreamsError  error
-	getLogEventsOutputs     []*cw.GetLogEventsOutput
-	getLogEventsError       error
-	callCount              int
+	startLiveTailOutput *cw.StartLiveTailOutput
+	startLiveTailError  error
+	startQueryOutput    *cw.StartQueryOutput
+	startQueryError     error
+	getQueryOutput      *cw.GetQueryResultsOutput
+	getQueryError       error
+	eventsChan          chan interface{}
+	callCount           int
 }
 
 var _ CloudWatchLogsAPI = (*mockCloudWatchLogsClient)(nil) // Verify interface compliance
 
+func (m *mockCloudWatchLogsClient) StartLiveTail(ctx context.Context, params *cw.StartLiveTailInput, optFns ...func(*cw.Options)) (*cw.StartLiveTailOutput, error) {
+	m.callCount++
+	if m.startLiveTailError != nil {
+		return nil, m.startLiveTailError
+	}
+	if m.eventsChan != nil {
+		return &cw.StartLiveTailOutput{Events: m.eventsChan}, nil
+	}
+	return m.startLiveTailOutput, nil
+}
+
 func (m *mockCloudWatchLogsClient) StartQuery(ctx context.Context, params *cw.StartQueryInput, optFns ...func(*cw.Options)) (*cw.StartQueryOutput, error) {
-	return nil, fmt.Errorf("not implemented")
+	m.callCount++
+	if m.startQueryError != nil {
+		return nil, m.startQueryError
+	}
+	return m.startQueryOutput, nil
 }
 
 func (m *mockCloudWatchLogsClient) GetQueryResults(ctx context.Context, params *cw.GetQueryResultsInput, optFns ...func(*cw.Options)) (*cw.GetQueryResultsOutput, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (m *mockCloudWatchLogsClient) DescribeLogStreams(ctx context.Context, params *cw.DescribeLogStreamsInput, optFns ...func(*cw.Options)) (*cw.DescribeLogStreamsOutput, error) {
 	m.callCount++
-	if m.describeLogStreamsError != nil {
-		return nil, m.describeLogStreamsError
+	if m.getQueryError != nil {
+		return nil, m.getQueryError
 	}
-	return m.describeLogStreamsOutput, nil
-}
-
-func (m *mockCloudWatchLogsClient) GetLogEvents(ctx context.Context, params *cw.GetLogEventsInput, optFns ...func(*cw.Options)) (*cw.GetLogEventsOutput, error) {
-	m.callCount++
-	if m.getLogEventsError != nil {
-		return nil, m.getLogEventsError
-	}
-	if len(m.getLogEventsOutputs) > 0 {
-		output := m.getLogEventsOutputs[0]
-		m.getLogEventsOutputs = m.getLogEventsOutputs[1:]
-		return output, nil
-	}
-	return &cw.GetLogEventsOutput{}, nil
+	return m.getQueryOutput, nil
 }
 
 func TestTailLogs(t *testing.T) {
@@ -59,39 +60,31 @@ func TestTailLogs(t *testing.T) {
 	// Test case 1: Normal operation with multiple events
 	t.Run("Normal operation", func(t *testing.T) {
 		timestamp := time.Now().UnixMilli()
-		streamName := "test-stream"
+		eventsChan := make(chan interface{}, 10)
+
+		// Send session start
+		eventsChan <- &cwTypes.LiveTailSessionStart{
+			SessionId: aws.String("test-session"),
+		}
+
+		// Send log events
+		eventsChan <- &cwTypes.LiveTailSessionUpdate{
+			LogEvents: []cwTypes.OutputLogEvent{
+				{
+					Message:       aws.String("log message 1"),
+					Timestamp:    aws.Int64(timestamp),
+					LogStreamName: aws.String("stream1"),
+				},
+				{
+					Message:       aws.String("log message 2"),
+					Timestamp:    aws.Int64(timestamp + 1000),
+					LogStreamName: aws.String("stream1"),
+				},
+			},
+		}
+
 		mock := &mockCloudWatchLogsClient{
-			describeLogStreamsOutput: &cw.DescribeLogStreamsOutput{
-				LogStreams: []cwTypes.LogStream{
-					{
-						LogStreamName: aws.String(streamName),
-					},
-				},
-			},
-			getLogEventsOutputs: []*cw.GetLogEventsOutput{
-				{
-					Events: []cwTypes.OutputLogEvent{
-						{
-							Message:   aws.String("log message 1"),
-							Timestamp: aws.Int64(timestamp),
-						},
-					},
-					NextForwardToken: aws.String("token1"),
-				},
-				{
-					Events: []cwTypes.OutputLogEvent{
-						{
-							Message:   aws.String("log message 2"),
-							Timestamp: aws.Int64(timestamp + 1000),
-						},
-					},
-					NextForwardToken: aws.String("token2"),
-				},
-				{
-					Events: []cwTypes.OutputLogEvent{},
-					NextForwardToken: aws.String("token3"),
-				},
-			},
+			eventsChan: eventsChan,
 		}
 
 		client := &CloudWatchClient{
@@ -103,6 +96,7 @@ func TestTailLogs(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			time.Sleep(100 * time.Millisecond)
+			close(eventsChan)
 			close(done)
 		}()
 
@@ -116,18 +110,18 @@ func TestTailLogs(t *testing.T) {
 		<-done
 
 		// Verify that we got some output and made the expected calls
-		if mock.callCount < 2 {
-			t.Errorf("Expected at least 2 calls (DescribeLogStreams + GetLogEvents), got %d", mock.callCount)
+		if mock.callCount < 1 {
+			t.Errorf("Expected at least 1 call (StartLiveTail), got %d", mock.callCount)
 		}
 		if buf.Len() == 0 {
 			t.Error("Expected some output in buffer")
 		}
 	})
 
-	// Test case 2: Error in DescribeLogStreams
-	t.Run("DescribeLogStreams error", func(t *testing.T) {
+	// Test case 2: StartLiveTail error
+	t.Run("StartLiveTail error", func(t *testing.T) {
 		mock := &mockCloudWatchLogsClient{
-			describeLogStreamsError: fmt.Errorf("ResourceNotFoundException: Log group does not exist"),
+			startLiveTailError: fmt.Errorf("ResourceNotFoundException: Log group does not exist"),
 		}
 
 		client := &CloudWatchClient{
@@ -141,12 +135,16 @@ func TestTailLogs(t *testing.T) {
 		}
 	})
 
-	// Test case 3: No log streams found
-	t.Run("No log streams", func(t *testing.T) {
+	// Test case 3: Session streaming error
+	t.Run("Session streaming error", func(t *testing.T) {
+		eventsChan := make(chan interface{}, 10)
+		eventsChan <- &cwTypes.SessionStreamingException{
+			Message: aws.String("streaming error occurred"),
+		}
+		close(eventsChan)
+
 		mock := &mockCloudWatchLogsClient{
-			describeLogStreamsOutput: &cw.DescribeLogStreamsOutput{
-				LogStreams: []cwTypes.LogStream{},
-			},
+			eventsChan: eventsChan,
 		}
 
 		client := &CloudWatchClient{
@@ -156,22 +154,20 @@ func TestTailLogs(t *testing.T) {
 
 		err := client.TailLogs("test-group", "test-stream", time.Now(), &buf, formatSimple)
 		if err == nil {
-			t.Error("Expected error when no log streams found")
+			t.Error("Expected streaming error")
 		}
 	})
 
-	// Test case 4: Error in GetLogEvents
-	t.Run("GetLogEvents error", func(t *testing.T) {
-		streamName := "test-stream"
+	// Test case 4: Session timeout
+	t.Run("Session timeout", func(t *testing.T) {
+		eventsChan := make(chan interface{}, 10)
+		eventsChan <- &cwTypes.SessionTimeoutException{
+			Message: aws.String("session timed out"),
+		}
+		close(eventsChan)
+
 		mock := &mockCloudWatchLogsClient{
-			describeLogStreamsOutput: &cw.DescribeLogStreamsOutput{
-				LogStreams: []cwTypes.LogStream{
-					{
-						LogStreamName: aws.String(streamName),
-					},
-				},
-			},
-			getLogEventsError: fmt.Errorf("connection lost"),
+			eventsChan: eventsChan,
 		}
 
 		client := &CloudWatchClient{
@@ -181,7 +177,7 @@ func TestTailLogs(t *testing.T) {
 
 		err := client.TailLogs("test-group", "test-stream", time.Now(), &buf, formatSimple)
 		if err == nil {
-			t.Error("Expected error from GetLogEvents")
+			t.Error("Expected timeout error")
 		}
 	})
 
@@ -189,32 +185,25 @@ func TestTailLogs(t *testing.T) {
 	t.Run("Output formats", func(t *testing.T) {
 		formats := []OutputFormat{formatSimple, formatJSON, formatCSV}
 		timestamp := time.Now().UnixMilli()
-		streamName := "test-stream"
 
 		for _, format := range formats {
+			eventsChan := make(chan interface{}, 10)
+			eventsChan <- &cwTypes.LiveTailSessionStart{
+				SessionId: aws.String("test-session"),
+			}
+			eventsChan <- &cwTypes.LiveTailSessionUpdate{
+				LogEvents: []cwTypes.OutputLogEvent{
+					{
+						Message:       aws.String("test message"),
+						Timestamp:    aws.Int64(timestamp),
+						LogStreamName: aws.String("stream1"),
+					},
+				},
+			}
+			close(eventsChan)
+
 			mock := &mockCloudWatchLogsClient{
-				describeLogStreamsOutput: &cw.DescribeLogStreamsOutput{
-					LogStreams: []cwTypes.LogStream{
-						{
-							LogStreamName: aws.String(streamName),
-						},
-					},
-				},
-				getLogEventsOutputs: []*cw.GetLogEventsOutput{
-					{
-						Events: []cwTypes.OutputLogEvent{
-							{
-								Message:   aws.String("test message"),
-								Timestamp: aws.Int64(timestamp),
-							},
-						},
-						NextForwardToken: aws.String("token1"),
-					},
-					{
-						Events: []cwTypes.OutputLogEvent{},
-						NextForwardToken: aws.String("token2"),
-					},
-				},
+				eventsChan: eventsChan,
 			}
 
 			client := &CloudWatchClient{
@@ -222,25 +211,13 @@ func TestTailLogs(t *testing.T) {
 				client: mock,
 			}
 
-			// Create a channel to stop after a short time
-			done := make(chan struct{})
-			go func() {
-				time.Sleep(100 * time.Millisecond)
-				close(done)
-			}()
-
-			var buf bytes.Buffer
-			go func() {
-				err := client.TailLogs("test-group", "test-stream", time.Now(), &buf, format)
-				if err != nil {
-					t.Errorf("TailLogs with format %s returned error: %v", format, err)
-				}
-			}()
-
-			<-done
-
-			if buf.Len() == 0 {
-				t.Errorf("Expected output for format %s", format)
+			var formatBuf bytes.Buffer
+			err := client.TailLogs("test-group", "test-stream", time.Now(), &formatBuf, format)
+			if err != nil {
+				t.Errorf("TailLogs with format %v returned error: %v", format, err)
+			}
+			if formatBuf.Len() == 0 {
+				t.Errorf("Expected output for format %v", format)
 			}
 		}
 	})

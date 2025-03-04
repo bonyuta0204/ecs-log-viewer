@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 
 	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )

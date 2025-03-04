@@ -122,7 +122,7 @@ func (c *CloudWatchClient) TailLogs(logGroup, logStreamPrefix string, writer Log
 					Value: event.Message,
 				},
 			}
-			if err := writer.WriteLogEvent([]cwTypes.ResultField{fields...}); err != nil {
+			if err := writer.WriteLogEvent(fields); err != nil {
 				return fmt.Errorf("failed to write log event: %v", err)
 			}
 		}
@@ -136,6 +136,7 @@ func (c *CloudWatchClient) TailLogs(logGroup, logStreamPrefix string, writer Log
 	}
 }
 
+// LogWriter interface for writing log events
 type LogWriter interface {
 	WriteLogEvent([]cwTypes.ResultField) error
 }

@@ -33,6 +33,7 @@ type AppOption struct {
 	fields    []string
 	output    string
 	format    string
+	tail      bool
 }
 
 func (o *AppOption) validate() error {
@@ -47,6 +48,11 @@ func (o *AppOption) validate() error {
 	default:
 		return fmt.Errorf("invalid format: %s", o.format)
 	}
+
+	if o.web && o.tail {
+		return fmt.Errorf("--tail cannot be used with --web option")
+	}
+
 	return nil
 }
 
@@ -62,6 +68,7 @@ func newAppOption(c *cli.Context) AppOption {
 		fields:    c.StringSlice("fields"),
 		output:    c.String("output"),
 		format:    c.String("format"),
+		tail:      c.Bool("tail"),
 	}
 }
 
@@ -211,25 +218,58 @@ func runApp(c *cli.Context) error {
 	log.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
 	log.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
 
-	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, runOption.fields, runOption.filter)
-
 	if runOption.web {
+		query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, runOption.fields, runOption.filter)
 		consoleURL := cloudwatchclient.BuildConsoleURL(cfg.Region, logGroup, query, runOption.duration)
 		log.Printf("Opening AWS Console URL: %s\n", consoleURL)
 		return openBrowser(consoleURL)
 	}
 
+	// Setup output writer
+	var writer io.Writer
+	var file *os.File
+
+	if runOption.output == "" {
+		writer = os.Stdout
+	} else {
+		var err error
+		file, err = os.Create(runOption.output)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %v", err)
+		}
+		defer func() {
+			if err := file.Close(); err != nil {
+				log.Printf("Warning: failed to close output file: %v\n", err)
+			}
+		}()
+		writer = file
+	}
+
+	outputFormat := cloudwatchclient.OutputFormat(runOption.format)
+
+	if runOption.tail {
+		log.Printf("Starting live log streaming...\n")
+		// Start from 1 minute ago for tail mode
+		tailStartTime := time.Now().Add(-1 * time.Minute)
+		return logsClient.TailLogs(logGroup, logStreamPrefix, tailStartTime, writer, outputFormat)
+	}
+
+	// Regular log query mode
+	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, runOption.fields, runOption.filter)
 	results, err := logsClient.QueryLogs(logGroup, query, startTime, endTime)
 	if err != nil {
 		return fmt.Errorf("failed to query logs: %v", err)
 	}
 
-	if len(results) == 0 {
-		log.Println("No logs found in the specified time range")
-		return nil
+	if err := cloudwatchclient.WriteLogEvents(writer, results, outputFormat, true); err != nil {
+		return fmt.Errorf("failed to write results in %s format: %v", runOption.format, err)
 	}
 
-	return writeResults(results, runOption.output, runOption.format)
+	if runOption.output != "" {
+		log.Printf("Wrote results in %s format to file: %s\n", runOption.format, runOption.output)
+	}
+
+	return nil
 }
 
 func openBrowser(url string) error {

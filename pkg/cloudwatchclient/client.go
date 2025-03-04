@@ -67,3 +67,75 @@ func (c *CloudWatchClient) QueryLogs(logGroup, query string, startTime, endTime 
 
 	return results, nil
 }
+
+// TailLogs starts a live stream of logs from the specified log group and stream prefix
+func (c *CloudWatchClient) TailLogs(logGroup, logStreamPrefix string, writer LogWriter) error {
+	input := &cw.GetLogEventsInput{
+		LogGroupName:  aws.String(logGroup),
+		StartFromHead: aws.Bool(false),
+	}
+
+	// Get the latest log stream
+	describeInput := &cw.DescribeLogStreamsInput{
+		LogGroupName:        aws.String(logGroup),
+		LogStreamNamePrefix: aws.String(logStreamPrefix),
+		OrderBy:            cwTypes.OrderByLastEventTime,
+		Descending:         aws.Bool(true),
+		Limit:             aws.Int32(1),
+	}
+
+	describeOutput, err := c.client.DescribeLogStreams(c.ctx, describeInput)
+	if err != nil {
+		return fmt.Errorf("failed to describe log streams: %v", err)
+	}
+
+	if len(describeOutput.LogStreams) == 0 {
+		return fmt.Errorf("no log streams found with prefix: %s", logStreamPrefix)
+	}
+
+	input.LogStreamName = describeOutput.LogStreams[0].LogStreamName
+
+	// Start from 1 minute ago to avoid missing any recent logs
+	startTime := time.Now().Add(-1 * time.Minute).UnixMilli()
+	input.StartTime = aws.Int64(startTime)
+
+	var nextToken *string
+	for {
+		if nextToken != nil {
+			input.NextToken = nextToken
+		}
+
+		output, err := c.client.GetLogEvents(c.ctx, input)
+		if err != nil {
+			return fmt.Errorf("failed to get log events: %v", err)
+		}
+
+		// Write the events
+		for _, event := range output.Events {
+			fields := []cwTypes.ResultField{
+				{
+					Field: aws.String("@timestamp"),
+					Value: aws.String(time.UnixMilli(*event.Timestamp).Format(time.RFC3339)),
+				},
+				{
+					Field: aws.String("@message"),
+					Value: event.Message,
+				},
+			}
+			if err := writer.WriteLogEvent([]cwTypes.ResultField{fields...}); err != nil {
+				return fmt.Errorf("failed to write log event: %v", err)
+			}
+		}
+
+		// If no new events, wait before polling again
+		if len(output.Events) == 0 {
+			time.Sleep(time.Second)
+		}
+
+		nextToken = output.NextForwardToken
+	}
+}
+
+type LogWriter interface {
+	WriteLogEvent([]cwTypes.ResultField) error
+}

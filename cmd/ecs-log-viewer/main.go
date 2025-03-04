@@ -67,6 +67,11 @@ func main() {
 				Usage:   "Open logs in AWS CloudWatch Console instead of viewing in terminal",
 				Value:   false,
 			},
+			&cli.BoolFlag{
+				Name:  "tail",
+				Usage: "Continuously stream new log entries (similar to tail -f)",
+				Value: false,
+			},
 		},
 		Action: runApp,
 	}

@@ -33,6 +33,7 @@ type AppOption struct {
 	fields    []string
 	output    string
 	format    string
+	tail      bool
 }
 
 func (o *AppOption) validate() error {
@@ -47,6 +48,11 @@ func (o *AppOption) validate() error {
 	default:
 		return fmt.Errorf("invalid format: %s", o.format)
 	}
+
+	if o.tail && o.web {
+		return fmt.Errorf("tail option cannot be used with web option")
+	}
+
 	return nil
 }
 
@@ -62,6 +68,7 @@ func newAppOption(c *cli.Context) AppOption {
 		fields:    c.StringSlice("fields"),
 		output:    c.String("output"),
 		format:    c.String("format"),
+		tail:      c.Bool("tail"),
 	}
 }
 
@@ -205,13 +212,30 @@ func runApp(c *cli.Context) error {
 		return err
 	}
 
+	if runOption.tail {
+		// Create a writer based on the format
+		var writer cloudwatchclient.LogWriter
+		switch runOption.format {
+		case "simple":
+			writer = cloudwatchclient.NewSimpleLogWriter(os.Stdout, runOption.fields[0])
+		case "csv":
+			writer = cloudwatchclient.NewCSVLogWriter(os.Stdout, runOption.fields)
+		case "json":
+			writer = cloudwatchclient.NewJSONLogWriter(os.Stdout, runOption.fields)
+		}
+
+		fmt.Printf("Tailing logs from %s/%s...\n", logGroup, logStreamPrefix)
+		return logsClient.TailLogs(logGroup, logStreamPrefix, writer)
+	}
+
+	// Regular log query
+	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, runOption.fields, runOption.filter)
+
 	endTime := time.Now()
 	startTime := endTime.Add(-runOption.duration)
 
 	log.Printf("Fetching logs from log group: %s, stream prefix: %s\n", logGroup, logStreamPrefix)
 	log.Printf("Time range: %s to %s\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
-
-	query := cloudwatchclient.BuildCloudWatchQuery(logStreamPrefix, runOption.fields, runOption.filter)
 
 	if runOption.web {
 		consoleURL := cloudwatchclient.BuildConsoleURL(cfg.Region, logGroup, query, runOption.duration)

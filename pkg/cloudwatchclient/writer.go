@@ -9,7 +9,6 @@ import (
 	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
-// OutputFormat represents the supported output formats
 type OutputFormat string
 
 const (
@@ -17,58 +16,6 @@ const (
 	formatCSV    OutputFormat = "csv"
 	formatJSON   OutputFormat = "json"
 )
-
-// WriteLogEvents writes CloudWatch log events in the specified format
-func WriteLogEvents(w io.Writer, events [][]cwTypes.ResultField, format OutputFormat, writeHeader bool) error {
-	if len(events) == 0 {
-		return nil
-	}
-
-	var writer interface {
-		WriteLogEvent(fields []cwTypes.ResultField) error
-	}
-
-	switch format {
-	case formatSimple:
-		writer = NewSimpleLogWriter(w, "")
-	case formatCSV:
-		fields := make([]string, 0)
-		for _, field := range events[0] {
-			if *field.Field != "@ptr" {
-				fields = append(fields, *field.Field)
-			}
-		}
-		writer = NewCSVLogWriter(w, fields)
-	case formatJSON:
-		fields := make([]string, 0)
-		for _, field := range events[0] {
-			if *field.Field != "@ptr" {
-				fields = append(fields, *field.Field)
-			}
-		}
-		writer = NewJSONLogWriter(w, fields)
-	default:
-		return fmt.Errorf("unsupported output format: %s", format)
-	}
-
-	if writeHeader && format == formatCSV {
-		csvWriter, ok := writer.(*CSVLogWriter)
-		if !ok {
-			return fmt.Errorf("unsupported format for header: %s", format)
-		}
-		if err := csvWriter.writer.Write(csvWriter.fields); err != nil {
-			return err
-		}
-	}
-
-	for _, event := range events {
-		if err := writer.WriteLogEvent(event); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
 
 type SimpleLogWriter struct {
 	writer io.Writer
@@ -114,7 +61,12 @@ func (w *CSVLogWriter) WriteLogEvent(fields []cwTypes.ResultField) error {
 			}
 		}
 	}
-	return w.writer.Write(record)
+	err := w.writer.Write(record)
+	if err != nil {
+		return err
+	}
+	w.writer.Flush()
+	return w.writer.Error()
 }
 
 type JSONLogWriter struct {
@@ -145,4 +97,74 @@ func (w *JSONLogWriter) WriteLogEvent(fields []cwTypes.ResultField) error {
 	}
 	_, err = fmt.Fprintln(w.writer, string(data))
 	return err
+}
+
+// WriteLogEvents writes CloudWatch log events in the specified format
+func WriteLogEvents(w io.Writer, events [][]cwTypes.ResultField, format OutputFormat, writeHeader bool) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	var writer interface {
+		WriteLogEvent(fields []cwTypes.ResultField) error
+	}
+
+	// Extract fields from the first event
+	fields := make([]string, 0)
+	for _, field := range events[0] {
+		if *field.Field != "@ptr" {
+			fields = append(fields, *field.Field)
+		}
+	}
+
+	switch format {
+	case formatSimple:
+		if len(fields) != 1 {
+			return fmt.Errorf("simple format can only be used when exactly one field is selected")
+		}
+		writer = NewSimpleLogWriter(w, fields[0])
+	case formatCSV:
+		writer = NewCSVLogWriter(w, fields)
+	case formatJSON:
+		writer = NewJSONLogWriter(w, fields)
+	default:
+		return fmt.Errorf("unsupported output format: %s", format)
+	}
+
+	if writeHeader && format == formatCSV {
+		csvWriter, ok := writer.(*CSVLogWriter)
+		if !ok {
+			return fmt.Errorf("unsupported format for header: %s", format)
+		}
+		if err := csvWriter.writer.Write(csvWriter.fields); err != nil {
+			return err
+		}
+		csvWriter.writer.Flush()
+		if err := csvWriter.writer.Error(); err != nil {
+			return err
+		}
+	}
+
+	for _, event := range events {
+		if err := writer.WriteLogEvent(event); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// WriteLogEventsCSV is a helper function for backward compatibility
+func WriteLogEventsCSV(w io.Writer, events [][]cwTypes.ResultField, writeHeader bool) error {
+	return WriteLogEvents(w, events, formatCSV, writeHeader)
+}
+
+// WriteLogEventsSimple is a helper function for backward compatibility
+func WriteLogEventsSimple(w io.Writer, events [][]cwTypes.ResultField) error {
+	return WriteLogEvents(w, events, formatSimple, false)
+}
+
+// WriteLogEventsJSON is a helper function for backward compatibility
+func WriteLogEventsJSON(w io.Writer, events [][]cwTypes.ResultField) error {
+	return WriteLogEvents(w, events, formatJSON, false)
 }

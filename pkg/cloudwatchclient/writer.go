@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	cwTypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
-// OutputFormat represents the supported output formats
 type OutputFormat string
 
 const (
@@ -18,94 +19,200 @@ const (
 	formatJSON   OutputFormat = "json"
 )
 
+// LogWriter interface for writing log events
+type LogWriter interface {
+	WriteLogEvents(events []cwTypes.LogEvent) error
+	WriteLogEvent(fields []cwTypes.ResultField) error
+}
+
+// SimpleLogWriter writes log events in a simple format
+type SimpleLogWriter struct {
+	writer io.Writer
+	field  string
+}
+
+func NewSimpleLogWriter(writer io.Writer, field string) *SimpleLogWriter {
+	return &SimpleLogWriter{
+		writer: writer,
+		field:  field,
+	}
+}
+
+func (w *SimpleLogWriter) WriteLogEvents(events []cwTypes.LogEvent) error {
+	for _, event := range events {
+		fields := []cwTypes.ResultField{
+			{
+				Field: aws.String("@timestamp"),
+				Value: aws.String(time.UnixMilli(*event.Timestamp).Format(time.RFC3339)),
+			},
+			{
+				Field: aws.String("@message"),
+				Value: event.Message,
+			},
+		}
+		if err := w.WriteLogEvent(fields); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *SimpleLogWriter) WriteLogEvent(fields []cwTypes.ResultField) error {
+	for _, field := range fields {
+		if *field.Field == w.field {
+			_, err := fmt.Fprintln(w.writer, *field.Value)
+			return err
+		}
+	}
+	return nil
+}
+
+// CSVLogWriter writes log events in CSV format
+type CSVLogWriter struct {
+	writer *csv.Writer
+	fields []string
+}
+
+func NewCSVLogWriter(writer io.Writer, fields []string) *CSVLogWriter {
+	return &CSVLogWriter{
+		writer: csv.NewWriter(writer),
+		fields: fields,
+	}
+}
+
+func (w *CSVLogWriter) WriteLogEvents(events []cwTypes.LogEvent) error {
+	for _, event := range events {
+		fields := []cwTypes.ResultField{
+			{
+				Field: aws.String("@timestamp"),
+				Value: aws.String(time.UnixMilli(*event.Timestamp).Format(time.RFC3339)),
+			},
+			{
+				Field: aws.String("@message"),
+				Value: event.Message,
+			},
+		}
+		if err := w.WriteLogEvent(fields); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *CSVLogWriter) WriteLogEvent(fields []cwTypes.ResultField) error {
+	record := make([]string, len(w.fields))
+	for i, targetField := range w.fields {
+		for _, field := range fields {
+			if *field.Field == targetField {
+				record[i] = *field.Value
+				break
+			}
+		}
+	}
+	err := w.writer.Write(record)
+	if err != nil {
+		return err
+	}
+	w.writer.Flush()
+	return w.writer.Error()
+}
+
+// JSONLogWriter writes log events in JSON format
+type JSONLogWriter struct {
+	writer io.Writer
+	fields []string
+}
+
+func NewJSONLogWriter(writer io.Writer, fields []string) *JSONLogWriter {
+	return &JSONLogWriter{
+		writer: writer,
+		fields: fields,
+	}
+}
+
+func (w *JSONLogWriter) WriteLogEvents(events []cwTypes.LogEvent) error {
+	for _, event := range events {
+		fields := []cwTypes.ResultField{
+			{
+				Field: aws.String("@timestamp"),
+				Value: aws.String(time.UnixMilli(*event.Timestamp).Format(time.RFC3339)),
+			},
+			{
+				Field: aws.String("@message"),
+				Value: event.Message,
+			},
+		}
+		if err := w.WriteLogEvent(fields); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *JSONLogWriter) WriteLogEvent(fields []cwTypes.ResultField) error {
+	record := make(map[string]string)
+	for _, targetField := range w.fields {
+		for _, field := range fields {
+			if *field.Field == targetField {
+				record[targetField] = *field.Value
+				break
+			}
+		}
+	}
+	data, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(w.writer, string(data))
+	return err
+}
+
 // WriteLogEvents writes CloudWatch log events in the specified format
 func WriteLogEvents(w io.Writer, events [][]cwTypes.ResultField, format OutputFormat, writeHeader bool) error {
 	if len(events) == 0 {
 		return nil
 	}
 
+	var writer LogWriter
+
+	// Extract fields from the first event
+	fields := make([]string, 0)
+	for _, field := range events[0] {
+		if *field.Field != "@ptr" {
+			fields = append(fields, *field.Field)
+		}
+	}
+
 	switch format {
 	case formatSimple:
-		return WriteLogEventsSimple(w, events)
+		if len(fields) != 1 {
+			return fmt.Errorf("simple format can only be used when exactly one field is selected")
+		}
+		writer = NewSimpleLogWriter(w, fields[0])
 	case formatCSV:
-		return WriteLogEventsCSV(w, events, writeHeader)
+		writer = NewCSVLogWriter(w, fields)
 	case formatJSON:
-		return WriteLogEventsJSON(w, events)
+		writer = NewJSONLogWriter(w, fields)
 	default:
 		return fmt.Errorf("unsupported output format: %s", format)
 	}
-}
 
-// WriteLogEventsSimple writes CloudWatch log events in a simple format (one value per line)
-// This format can only be used when exactly one field is selected
-func WriteLogEventsSimple(w io.Writer, events [][]cwTypes.ResultField) error {
-	if len(events) == 0 {
-		return nil
+	if writeHeader && format == formatCSV {
+		csvWriter, ok := writer.(*CSVLogWriter)
+		if !ok {
+			return fmt.Errorf("unsupported format for header: %s", format)
+		}
+		if err := csvWriter.writer.Write(csvWriter.fields); err != nil {
+			return err
+		}
+		csvWriter.writer.Flush()
+		if err := csvWriter.writer.Error(); err != nil {
+			return err
+		}
 	}
+
 	for _, event := range events {
-		for _, field := range event {
-			if *field.Field != "@ptr" {
-				if field.Value != nil {
-					if _, err := fmt.Fprintln(w, *field.Value); err != nil {
-						return err
-					}
-				} else {
-					if _, err := fmt.Fprintln(w, ""); err != nil {
-						return err
-					}
-				}
-				break
-			}
-		}
-	}
-	return nil
-}
-
-// WriteLogEventsCSV writes CloudWatch log events to a CSV file with optional headers
-func WriteLogEventsCSV(w io.Writer, events [][]cwTypes.ResultField, writeHeader bool) error {
-	if len(events) == 0 {
-		return nil
-	}
-	csvWriter := csv.NewWriter(w)
-	defer csvWriter.Flush()
-	columnCount := len(events[0])
-
-	var headers []string
-	// convert event field index to csv column index
-	// we need this map since we skip @ptr field
-	indexMap := make([]int, columnCount)
-	// Write header if there are events
-	if len(events) > 0 && len(events[0]) > 0 {
-		headerIdx := 0
-		for i, field := range events[0] {
-			// Skip @ptr field
-			if *field.Field != "@ptr" {
-				indexMap[i] = headerIdx
-				headerIdx++
-				headers = append(headers, *field.Field)
-			}
-		}
-		if writeHeader {
-			if err := csvWriter.Write(headers); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Write data rows
-	for _, event := range events {
-		row := make([]string, len(headers))
-		for i, field := range event {
-			// Skip @ptr field
-			if *field.Field != "@ptr" {
-				if field.Value != nil {
-					row[indexMap[i]] = *field.Value
-				} else {
-					row[indexMap[i]] = "" // Empty string for nil values
-				}
-			}
-		}
-		if err := csvWriter.Write(row); err != nil {
+		if err := writer.WriteLogEvent(event); err != nil {
 			return err
 		}
 	}
@@ -113,28 +220,15 @@ func WriteLogEventsCSV(w io.Writer, events [][]cwTypes.ResultField, writeHeader 
 	return nil
 }
 
-// WriteLogEventsJSON writes CloudWatch log events in JSON format
+// Helper functions for backward compatibility
+func WriteLogEventsCSV(w io.Writer, events [][]cwTypes.ResultField, writeHeader bool) error {
+	return WriteLogEvents(w, events, formatCSV, writeHeader)
+}
+
+func WriteLogEventsSimple(w io.Writer, events [][]cwTypes.ResultField) error {
+	return WriteLogEvents(w, events, formatSimple, false)
+}
+
 func WriteLogEventsJSON(w io.Writer, events [][]cwTypes.ResultField) error {
-	if len(events) == 0 {
-		return nil
-	}
-
-	var logs []map[string]string
-	for _, event := range events {
-		log := make(map[string]string)
-		for _, field := range event {
-			if *field.Field != "@ptr" {
-				if field.Value != nil {
-					log[*field.Field] = *field.Value
-				} else {
-					log[*field.Field] = ""
-				}
-			}
-		}
-		logs = append(logs, log)
-	}
-
-	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(logs)
+	return WriteLogEvents(w, events, formatJSON, false)
 }
